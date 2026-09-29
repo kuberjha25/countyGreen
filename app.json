@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "COUNTY GREEN",
+    "slug": "frontend",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/cg/logo.png",
+    "scheme": "frontend",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.emergent.countygreenmobile.wlbznm"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/cg/logo.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.emergent.countygreenmobile.wlbznm"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-image.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000"
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-status-bar",
+      "@react-native-vector-icons/ionicons"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

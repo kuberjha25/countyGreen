@@ -1,0 +1,128 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build County Green Android APK",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"expo",
+				"run:android",
+				"--variant",
+				"release"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Assemble County Green Release APK",
+			"type": "shell",
+			"command": ".\\android\\gradlew.bat",
+			"args": [
+				"assembleRelease"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Assemble County Green Release APK",
+			"type": "shell",
+			"command": ".\\android\\gradlew.bat",
+			"args": [
+				"-p",
+				"android",
+				"assembleRelease"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build County Green APK from Android directory",
+			"type": "shell",
+			"command": "Set-Location android; .\\gradlew.bat assembleRelease",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Diagnose Android JS bundle failure",
+			"type": "shell",
+			"command": "Set-Location android; .\\gradlew.bat :app:createBundleReleaseJsAndAssets --stacktrace --info",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build APK using Windows safe path",
+			"type": "shell",
+			"command": "subst X: D:\\county-green-main(1)\\county-green-main\\frontend; Set-Location X:\\android; .\\gradlew.bat assembleRelease",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build APK using Windows safe path",
+			"type": "shell",
+			"command": "subst X: 'D:\\county-green-main(1)\\county-green-main\\frontend'; Set-Location X:\\android; .\\gradlew.bat assembleRelease",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build APK using Windows safe path",
+			"type": "shell",
+			"command": "$root='D:\\county-green-main(1)\\county-green-main\\frontend'; & subst X: $root; Set-Location X:\\android; .\\gradlew.bat assembleRelease",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build County Green APK without path parsing issues",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"-e",
+				"const { spawnSync } = require('node:child_process'); const root = process.cwd(); const alias = spawnSync('subst.exe', ['X:', root], { stdio: 'inherit' }); if (alias.status !== 0) process.exit(alias.status || 1); const build = spawnSync('cmd.exe', ['/d', '/c', 'X:\\\\android\\\\gradlew.bat', 'assembleRelease'], { cwd: 'X:\\\\android', stdio: 'inherit' }); spawnSync('subst.exe', ['X:', '/d'], { stdio: 'inherit' }); process.exit(build.status || 0);"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build County Green APK",
+			"type": "shell",
+			"command": "npm run build:apk:local",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Diagnose Expo autolinking during APK build",
+			"type": "shell",
+			"command": "npm run build:apk:local -- --info --stacktrace",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build County Green release APK",
+			"type": "shell",
+			"command": "Set-Location android; .\\gradlew.bat assembleRelease",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build County Green release APK",
+			"type": "shell",
+			"command": "Set-Location android; .\\gradlew.bat assembleRelease",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Inspect Hermes bundling command",
+			"type": "shell",
+			"command": "Set-Location android; .\\gradlew.bat :app:createBundleReleaseJsAndAssets --info",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Final County Green APK build",
+			"type": "shell",
+			"command": "Set-Location android; .\\gradlew.bat assembleRelease",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
