@@ -7,29 +7,36 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { put, User } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { PARTNER_TYPES } from "@/src/brand";
-import { Button, Field, Header, ScreenTitle, SectionLabel, Select, StepIndicator, OptionTile, useScreenStyles } from "@/src/components/ui";
+import { ENTITY_TYPES, PARTNER_TYPES, PartnerType, partnerProfile } from "@/src/brand";
+import { Button, ChoiceChips, Field, Header, ScreenTitle, SectionLabel, StepIndicator, OptionTile, useScreenStyles } from "@/src/components/ui";
 import { spacing } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-const ENTITY = ["Individual", "Proprietorship", "Partnership Firm", "LLP", "Private Limited"];
-
-// Screen 4 · Complete Profile · Step 1 (Type of Channel Partner)
+// Screen 4 · Complete Profile · Step 1 (Partner type & basic information)
 export default function ProfileType() {
   const s = useScreenStyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
   const { user, setUser } = useAuth();
-  const [type, setType] = useState(user?.partner_type ?? "Channel Partner");
-  const [entity, setEntity] = useState("");
+  const [type, setType] = useState<PartnerType>((user?.partner_type as PartnerType) ?? "Channel Partner");
+  const [entity, setEntity] = useState(user?.entity_type ?? "");
   const [first, setFirst] = useState(user?.first_name ?? "");
   const [last, setLast] = useState(user?.last_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const profile = partnerProfile(type);
 
   const save = useMutation({
-    mutationFn: () => put<User>("/me", { partner_type: type, first_name: first.trim(), last_name: last.trim(), email: email.trim(), profile_step: 1 }),
+    mutationFn: () =>
+      put<User>("/me", {
+        partner_type: type,
+        entity_type: profile.entityLabel ? entity : "Individual",
+        first_name: first.trim(),
+        last_name: last.trim(),
+        email: email.trim(),
+        profile_step: Math.max(user?.profile_step ?? 0, 1),
+      }),
     onSuccess: (u) => {
       setUser(u);
       router.push("/(auth)/profile-addon");
@@ -40,7 +47,7 @@ export default function ProfileType() {
   const submit = () => {
     const e: Record<string, string> = {};
     if (!first.trim()) e.first = "First name is required";
-    if (!entity) e.entity = "Select the type of entity";
+    if (profile.entityLabel && !entity) e.entity = "Select the type of entity";
     if (email && !/^\S+@\S+\.\S+$/.test(email)) e.email = "Enter a valid email";
     setErrors(e);
     if (Object.keys(e).length) return;
@@ -49,7 +56,7 @@ export default function ProfileType() {
 
   return (
     <View style={s.screen} testID="profile-type-screen">
-      <Header showBell={false} onBack={() => router.replace("/(auth)/login")} />
+      <Header showBell={false} onBack={() => (user?.profile_completed && router.canGoBack() ? router.back() : router.replace("/(auth)/login"))} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled">
         <StepIndicator step={1} total={4} />
         <ScreenTitle title="Complete Profile" subtitle="Please fill in your details to get started" />
@@ -61,7 +68,7 @@ export default function ProfileType() {
           ))}
         </View>
 
-        <Select label="Type of Channel Partner" value={entity} options={ENTITY} onChange={setEntity} placeholder="Select entity type" error={errors.entity} testID="entity-type-select" />
+        {profile.entityLabel ? <ChoiceChips label={profile.entityLabel} value={entity} options={ENTITY_TYPES} onChange={setEntity} error={errors.entity} testID="entity-type" /> : null}
 
         <SectionLabel>Basic Information</SectionLabel>
         <View style={{ flexDirection: "row", gap: 10 }}>

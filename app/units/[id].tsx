@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
 import { BRAND, img } from "@/src/brand";
-import { Badge, Button, Card, ErrorState, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { Badge, BottomNav, Button, Card, ErrorState, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
@@ -28,7 +28,7 @@ export default function UnitDetail() {
     <View style={s.screen} testID="unit-detail-screen">
       {unit.isLoading ? <Loading /> : unit.isError || !u ? <ErrorState message={(unit.error as Error)?.message ?? "Not found"} onRetry={unit.refetch} /> : (
         <>
-          <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={{ paddingBottom: spacing.lg }} showsVerticalScrollIndicator={false}>
             <View style={styles.hero}>
               <Image source={img(u.image)} style={styles.heroImg} contentFit="cover" />
               <LinearGradient colors={[colors.scrimStart, colors.scrimEnd]} style={styles.heroImg} />
@@ -75,12 +75,13 @@ export default function UnitDetail() {
               </View>
             </View>
           </ScrollView>
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 12, flexDirection: "row", gap: 10 }]}>
+          <View style={[styles.footer, { flexDirection: "row", gap: 10 }]}>
             <Button label="Floor plan" variant="secondary" icon="map-outline" onPress={() => router.push("/documents")} style={{ flex: 1 }} testID="unit-floorplan-button" />
             <Button label="Schedule visit" variant="gold" icon="calendar-outline" onPress={() => router.push("/visits/new")} style={{ flex: 1 }} testID="unit-schedule-button" />
           </View>
         </>
       )}
+      <BottomNav active="inventory" />
     </View>
   );
 }
@@ -97,5 +98,5 @@ const useStyles = makeStyles((colors) => ({
   kpiLabel: { fontFamily: fonts.semibold, fontSize: 9, letterSpacing: 1, color: colors.muted, marginTop: 2, textAlign: "center" },
   note: { flexDirection: "row", gap: 8, marginTop: spacing.lg, padding: 12, borderRadius: radius.md, backgroundColor: colors.warningSoft },
   noteText: { flex: 1, fontFamily: fonts.body, fontSize: 12, lineHeight: 18, color: colors.warning },
-  footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.divider },
+  footer: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.divider },
 }));

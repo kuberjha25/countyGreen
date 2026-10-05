@@ -4,8 +4,8 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { post } from "@/src/api";
@@ -26,6 +26,9 @@ export default function Login() {
   const [code, setCode] = useState("+91");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | undefined>();
+  const { height } = useWindowDimensions();
+  // Shorter hero on small phones so the form and Continue fit without scrolling.
+  const heroHeight = Math.min(340, Math.max(240, Math.round(height * 0.36)));
 
   const request = useMutation({
     mutationFn: () => post("/auth/request-otp", { country_code: code, phone }),
@@ -45,8 +48,9 @@ export default function Login() {
 
   return (
     <View style={styles.screen} testID="login-screen">
-      <KeyboardAwareScrollView bottomOffset={120} contentContainerStyle={{ paddingBottom: 140 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
+      {/* Continue sits in the form, right below the mobile field, so it can never cover the input. */}
+      <KeyboardAwareScrollView bottomOffset={96} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={[styles.hero, { height: heroHeight }]}>
           <Image source={IMAGES["hero-security"]} style={styles.heroImg} contentFit="cover" />
           <LinearGradient colors={[colors.scrimStart, colors.scrimEnd]} style={styles.heroImg} />
           <View style={[styles.heroContent, { paddingTop: insets.top + 16 }]}>
@@ -60,7 +64,7 @@ export default function Login() {
         <View style={styles.form}>
           <Text style={styles.eyebrow}>LOGIN OR REGISTER</Text>
           <Text style={styles.h1}>Welcome</Text>
-          <Text style={styles.sub}>Enter your mobile number to login or register as a County Green channel partner.</Text>
+          <Text style={styles.sub}>Enter your mobile number to login or register as a County Greens partner — Channel Partner, Broker, Influencer or Freelancer.</Text>
 
           <Text style={styles.label}>MOBILE NUMBER</Text>
           <View style={{ flexDirection: "row", gap: 10 }}>
@@ -75,12 +79,7 @@ export default function Login() {
             <Ionicons name="shield-checkmark-outline" size={14} color={colors.muted} />
             <Text style={styles.hint}>We{"'"}ll send a one-time verification code by SMS.</Text>
           </View>
-        </View>
-      </KeyboardAwareScrollView>
-
-      <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-          <Button label="Continue" icon="arrow-forward" onPress={submit} loading={request.isPending} testID="login-continue-button" />
+          <Button label="Continue" icon="arrow-forward" onPress={submit} loading={request.isPending} testID="login-continue-button" style={{ marginTop: spacing.xl }} />
           <Text style={styles.terms}>
             By continuing, you agree to our{" "}
             <Text style={styles.termsLink} onPress={() => router.push("/terms")} testID="login-terms-link">
@@ -100,14 +99,14 @@ export default function Login() {
             ))}
           </View>
         </View>
-      </KeyboardStickyView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
 
 const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.surface },
-  hero: { height: 340, backgroundColor: colors.forestDeep },
+  hero: { backgroundColor: colors.forestDeep },
   heroImg: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   heroContent: { flex: 1, paddingHorizontal: spacing.xl, paddingBottom: spacing.xl, justifyContent: "space-between" },
   heroTag: { fontFamily: fonts.displayItalic, fontSize: 28, color: colors.onImage },
@@ -115,11 +114,10 @@ const useStyles = makeStyles((colors) => ({
   form: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   eyebrow: { fontFamily: fonts.semibold, fontSize: 11, letterSpacing: 2, color: colors.brandSecondary, marginBottom: 6 },
   h1: { fontFamily: fonts.display, fontSize: 36, color: colors.onSurface },
-  sub: { fontFamily: fonts.body, fontSize: 14, lineHeight: 21, color: colors.muted, marginTop: 6, marginBottom: spacing.xl },
+  sub: { fontFamily: fonts.body, fontSize: 14, lineHeight: 21, color: colors.muted, marginTop: 6, marginBottom: spacing.lg },
   label: { fontFamily: fonts.semibold, fontSize: 11, letterSpacing: 1.4, color: colors.onSurfaceTertiary, marginBottom: 8 },
   hintRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: -4 },
   hint: { fontFamily: fonts.body, fontSize: 12, color: colors.muted },
-  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, backgroundColor: colors.surface },
   terms: { fontFamily: fonts.body, fontSize: 12, lineHeight: 18, color: colors.muted, textAlign: "center", marginTop: 14 },
   termsLink: { color: colors.brandPrimary, fontFamily: fonts.semibold },
   socialRow: { flexDirection: "row", justifyContent: "center", gap: 12, marginTop: 14 },

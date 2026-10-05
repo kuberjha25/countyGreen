@@ -31,7 +31,7 @@ export default function Visits() {
       <Header showBack={false} right={<Pressable onPress={() => router.push("/visits/new")} style={styles.addBtn} testID="visits-add-button"><Ionicons name="add" size={22} color={colors.onBrandSecondary} /></Pressable>} />
       <View style={s.content}>
         <Text style={[s.h2, { fontSize: 30 }]}>Project Visits</Text>
-        <Text style={[s.bodyMuted, { marginBottom: spacing.md }]}>Track scheduled and attended site visits at County Green.</Text>
+        <Text style={[s.bodyMuted, { marginBottom: spacing.md }]}>Track scheduled and attended site visits at County Greens.</Text>
         <SearchBar value={q} onChange={setQ} placeholder="Search by name or phone" testID="visits-search" />
       </View>
       <ChipRow options={[...TABS]} value={tab} onChange={setTab} counts={counts} testIDPrefix="visits-tab" />
@@ -53,6 +53,7 @@ export default function Visits() {
                 <View style={{ flex: 1 }}>
                   <Text style={s.name}>{v.full_name}</Text>
                   <Text style={s.meta}>{v.project} · {v.visitor_type}</Text>
+                  {v.assigned_to ? <Text style={s.caption} numberOfLines={1}>Staff: {v.assigned_to}</Text> : null}
                   <View style={[s.between, { marginTop: 8 }]}>
                     <View style={s.row}><Ionicons name="time-outline" size={13} color={colors.muted} /><Text style={[s.caption, { marginLeft: 4 }]}>{v.visit_time}</Text></View>
                     <Badge label={v.status} small />

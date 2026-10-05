@@ -5,7 +5,7 @@ import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
-import { Badge, ChipRow, EmptyState, ErrorState, Header, Loading, SearchBar, useScreenStyles } from "@/src/components/ui";
+import { Badge, BottomNav, ChipRow, EmptyState, ErrorState, Header, Loading, SearchBar, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
@@ -28,7 +28,7 @@ export default function Documents() {
     <View style={s.screen} testID="documents-screen">
       <Header title="Documents" />
       <View style={s.content}>
-        <Text style={[s.h2, { fontSize: 30 }]}>County Green Documents</Text>
+        <Text style={[s.h2, { fontSize: 30 }]}>County Greens Documents</Text>
         <Text style={[s.bodyMuted, { marginBottom: spacing.md }]}>Brochures, plans, pricing and legal documents for partner use.</Text>
         <SearchBar value={q} onChange={setQ} placeholder="Search documents" testID="documents-search" />
       </View>
@@ -58,6 +58,7 @@ export default function Documents() {
           )}
         />
       )}
+      <BottomNav />
     </View>
   );
 }

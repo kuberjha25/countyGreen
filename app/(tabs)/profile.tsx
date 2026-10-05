@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { IMAGES } from "@/src/brand";
+import { IMAGES, partnerProfile } from "@/src/brand";
 import { Avatar, Badge, Button, Card, InfoRow, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -27,13 +27,15 @@ export default function Profile() {
   const dash = useQuery({ queryKey: ["dashboard"], queryFn: () => get("/dashboard") });
   const [confirm, setConfirm] = useState(false);
   const name = `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim() || "Channel Partner";
+  const partnerType = user?.partner_type ?? "Channel Partner";
+  const profile = partnerProfile(partnerType);
 
   const MENU = [
     { label: "Edit profile", icon: "create-outline", route: "/(auth)/profile-type", testID: "menu-edit-profile" },
-    { label: "Company & documents", icon: "document-text-outline", route: "/(auth)/profile-company", testID: "menu-documents" },
+    { label: "My documents", icon: "document-text-outline", route: "/(auth)/profile-company", testID: "menu-documents" },
     { label: "MIS Report", icon: "stats-chart-outline", route: "/mis", testID: "menu-mis" },
     { label: "Notifications", icon: "notifications-outline", route: "/notifications", testID: "menu-notifications" },
-    { label: "About County Green", icon: "leaf-outline", route: "/about", testID: "menu-about" },
+    { label: "About County Greens", icon: "leaf-outline", route: "/about", testID: "menu-about" },
     { label: "Terms & Conditions", icon: "shield-checkmark-outline", route: "/terms", testID: "menu-terms" },
   ] as const;
 
@@ -51,7 +53,7 @@ export default function Profile() {
             <Avatar name={name} size={64} tone="gold" />
             <View style={{ flex: 1 }}>
               <Text style={styles.name} testID="profile-name">{name}</Text>
-              <Text style={styles.sub}>{user?.partner_type ?? "Channel Partner"} · Partner ID CG-{(user?.id ?? "").slice(-6).toUpperCase()}</Text>
+              <Text style={styles.sub}>{partnerType} · Partner ID CG-{(user?.id ?? "").slice(-6).toUpperCase()}</Text>
               <View style={{ marginTop: 6 }}><Badge label={user?.profile_completed ? "Verified" : "Pending"} small /></View>
             </View>
           </View>
@@ -74,16 +76,21 @@ export default function Profile() {
           <Card style={{ marginTop: spacing.md }}>
             <InfoRow icon="call-outline" label="Mobile number" value={user?.phone} />
             <InfoRow icon="mail-outline" label="Email address" value={user?.email} />
-            <InfoRow icon="location-outline" label="City" value={user?.city} />
+            <InfoRow icon="location-outline" label="City" value={[user?.city, user?.state].filter(Boolean).join(", ")} />
             <InfoRow icon="calendar-outline" label="Member since" value={fmtDate(user?.created_at)} />
           </Card>
 
-          <SectionLabel style={{ marginTop: spacing.xl }}>Company Information</SectionLabel>
+          <SectionLabel style={{ marginTop: spacing.xl }}>Professional Information</SectionLabel>
           <Card>
-            <InfoRow icon="business-outline" label="Company / Firm" value={user?.company_name} />
-            <InfoRow icon="ribbon-outline" label="RERA number" value={user?.rera_number} />
-            <InfoRow icon="briefcase-outline" label="Experience" value={user?.experience} />
-            <InfoRow icon="star-outline" label="Specialisation" value={user?.specialisation} />
+            <InfoRow icon="pricetag-outline" label="Partner type" value={partnerType} />
+            {profile.entityLabel ? <InfoRow icon="git-network-outline" label="Entity type" value={user?.entity_type} /> : null}
+            {profile.entityLabel ? <InfoRow icon="business-outline" label="Company / Firm" value={user?.company_name} /> : null}
+            {profile.experience ? <InfoRow icon="briefcase-outline" label="Experience" value={user?.experience} /> : null}
+            {profile.specialisation ? <InfoRow icon="star-outline" label="Specialisation" value={user?.specialisation} /> : null}
+            {profile.social ? <InfoRow icon="logo-instagram" label="Instagram" value={user?.social?.instagram} /> : null}
+            {profile.social ? <InfoRow icon="logo-youtube" label="YouTube" value={user?.social?.youtube} /> : null}
+            {profile.social ? <InfoRow icon="logo-facebook" label="Facebook" value={user?.social?.facebook} /> : null}
+            {profile.social ? <InfoRow icon="people-circle-outline" label="Total followers" value={user?.followers} /> : null}
             <InfoRow icon="people-outline" label="Associated employee" value={user?.associated_employee || "None"} />
           </Card>
 
@@ -92,7 +99,7 @@ export default function Profile() {
             {(user?.documents ?? []).length ? (user?.documents ?? []).map((d) => (
               <View key={d.type} style={[s.between, { paddingVertical: 8 }]}>
                 <Text style={[s.body, { fontSize: 14, flex: 1 }]}>{d.type}</Text>
-                <Badge label={d.status} tone="warning" small />
+                <Badge label={d.status} tone={d.status === "Verified" ? "success" : "warning"} small />
               </View>
             )) : <Text style={s.bodyMuted}>No documents uploaded yet.</Text>}
           </Card>
@@ -109,7 +116,7 @@ export default function Profile() {
           </Card>
 
           <Button label="Log out" variant="danger" icon="log-out-outline" onPress={() => setConfirm(true)} style={{ marginTop: spacing.xl }} testID="logout-button" />
-          <Text style={[s.caption, { textAlign: "center", marginTop: spacing.lg }]}>County Green Partner App · v1.0.0</Text>
+          <Text style={[s.caption, { textAlign: "center", marginTop: spacing.lg }]}>County Greens Partner App · v1.0.0</Text>
         </View>
       </ScrollView>
 
@@ -117,7 +124,7 @@ export default function Profile() {
         <Pressable style={styles.backdrop} onPress={() => setConfirm(false)}>
           <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]} onPress={() => {}} testID="logout-sheet">
             <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>Log out of County Green?</Text>
+            <Text style={styles.sheetTitle}>Log out of County Greens?</Text>
             <Text style={[s.bodyMuted, { marginBottom: spacing.lg }]}>You{"'"}ll need to verify your mobile number again to sign back in.</Text>
             <Button label="Log out" variant="danger" onPress={async () => { setConfirm(false); await signOut(); toast.show("You have been logged out", "info"); router.replace("/(auth)/login"); }} testID="confirm-logout-button" />
             <Button label="Cancel" variant="ghost" small onPress={() => setConfirm(false)} style={{ marginTop: 8 }} testID="cancel-logout-button" />

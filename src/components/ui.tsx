@@ -16,7 +16,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useAuth } from "@/src/auth";
 import { LEAF } from "@/src/brand";
+import { TABS, TabName } from "@/src/nav";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
@@ -271,7 +273,50 @@ export function Select({
   );
 }
 
-export function SearchBar({ value, onChange, placeholder = "Search", testID, onFilter }: { value: string; onChange: (v: string) => void; placeholder?: string; testID?: string; onFilter?: () => void }) {
+// Single-choice picker shown as tappable chips (same pattern as the partner
+// type tiles), for short option lists where a dropdown hides the choices.
+export function ChoiceChips({
+  label,
+  options,
+  value,
+  onChange,
+  error,
+  testID = "choice",
+}: {
+  label?: string;
+  options: string[];
+  value?: string;
+  onChange: (v: string) => void;
+  error?: string;
+  testID?: string;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <View style={{ marginBottom: spacing.lg }}>
+      {label ? <Text style={styles.fieldLabel}>{label.toUpperCase()}</Text> : null}
+      <View style={styles.choiceWrap}>
+        {options.map((o) => {
+          const selected = o === value;
+          return (
+            <Pressable
+              key={o}
+              testID={`${testID}-${o.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+              onPress={() => onChange(o)}
+              style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, !!error && !selected && styles.inputError, pressed && styles.pressed]}
+            >
+              {selected ? <Ionicons name="checkmark" size={14} color={colors.onBrandPrimary} /> : null}
+              <Text style={[styles.choiceText, selected && { color: colors.onBrandPrimary, fontFamily: fonts.semibold }]}>{o}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    </View>
+  );
+}
+
+export function SearchBar({ value, onChange, placeholder = "Search", testID, onFilter, filterCount = 0 }: { value: string; onChange: (v: string) => void; placeholder?: string; testID?: string; onFilter?: () => void; filterCount?: number }) {
   const styles = useStyles();
   const { colors } = useTheme();
   return (
@@ -286,8 +331,13 @@ export function SearchBar({ value, onChange, placeholder = "Search", testID, onF
         ) : null}
       </View>
       {onFilter ? (
-        <Pressable onPress={onFilter} style={styles.filterBtn} testID="filter-button">
-          <Ionicons name="options-outline" size={20} color={colors.onSurface} />
+        <Pressable onPress={onFilter} style={[styles.filterBtn, filterCount > 0 && styles.filterBtnActive]} testID="filter-button">
+          <Ionicons name="options-outline" size={20} color={filterCount > 0 ? colors.onBrandPrimary : colors.onSurface} />
+          {filterCount > 0 ? (
+            <View style={styles.filterCount}>
+              <Text style={styles.filterCountText}>{filterCount}</Text>
+            </View>
+          ) : null}
         </Pressable>
       ) : null}
     </View>
@@ -498,6 +548,75 @@ export function Stat({ value, label, tone = "brand", testID }: { value: string |
 }
 
 /* ------------------------------------------------------------------ */
+/* Filter sheet                                                        */
+/* ------------------------------------------------------------------ */
+export const FILTER_ALL = "All";
+export type FilterGroup = { key: string; label: string; options: string[] };
+export type FilterValues = Record<string, string>;
+
+export const activeFilterCount = (v: FilterValues) => Object.values(v).filter((x) => x && x !== FILTER_ALL).length;
+
+export function FilterSheet({ visible, onClose, groups, value, onApply }: { visible: boolean; onClose: () => void; groups: FilterGroup[]; value: FilterValues; onApply: (v: FilterValues) => void }) {
+  const styles = useStyles();
+  const insets = useSafeAreaInsets();
+  const [draft, setDraft] = useState<FilterValues>(value);
+  return (
+    <Modal visible={visible} transparent animationType="fade" onShow={() => setDraft(value)} onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose} testID="filter-backdrop">
+        <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]} onPress={() => {}} testID="filter-sheet">
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>Filters</Text>
+          <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
+            {groups.map((g) => (
+              <ChoiceChips key={g.key} label={g.label} options={[FILTER_ALL, ...g.options]} value={draft[g.key] || FILTER_ALL} onChange={(v) => setDraft((d) => ({ ...d, [g.key]: v }))} testID={`filter-${g.key}`} />
+            ))}
+          </ScrollView>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: spacing.sm }}>
+            <Button label="Reset" variant="secondary" small onPress={() => setDraft(Object.fromEntries(groups.map((g) => [g.key, FILTER_ALL])))} style={{ flex: 1 }} testID="filter-reset-button" />
+            <Button
+              label="Apply"
+              small
+              onPress={() => {
+                onApply(draft);
+                onClose();
+              }}
+              style={{ flex: 2 }}
+              testID="filter-apply-button"
+            />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Footer navigation for internal screens (outside the tab bar)        */
+/* ------------------------------------------------------------------ */
+export function BottomNav({ active }: { active?: TabName }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { token } = useAuth();
+  if (!token) return null;
+  return (
+    <View style={[styles.nav, { paddingBottom: Math.max(insets.bottom, 8) }]} testID="bottom-nav">
+      {TABS.map((t) => {
+        const on = t.name === active;
+        const color = on ? colors.brandPrimary : colors.muted;
+        return (
+          <Pressable key={t.name} onPress={() => router.dismissTo(t.href)} style={({ pressed }) => [styles.navItem, pressed && styles.pressed]} testID={`bottom-nav-${t.name}`}>
+            <Ionicons name={(on ? t.active : t.icon) as IconName} size={22} color={color} />
+            <Text style={[styles.navLabel, { color }]}>{t.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 const useStyles = makeStyles((colors) => ({
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: spacing.md, paddingBottom: 10, backgroundColor: colors.surface },
   headerSide: { width: 64, justifyContent: "center" },
@@ -524,6 +643,18 @@ const useStyles = makeStyles((colors) => ({
   errorText: { fontFamily: fonts.body, fontSize: 12, color: colors.error, marginTop: 6 },
   hintText: { fontFamily: fonts.body, fontSize: 12, color: colors.muted, marginTop: 6 },
   filterBtn: { width: 46, height: 46, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
+  filterBtnActive: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  filterCount: { position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center" },
+  filterCountText: { fontFamily: fonts.semibold, fontSize: 10, color: colors.onBrandSecondary },
+
+  choiceWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  choice: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
+  choiceSelected: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
+  choiceText: { fontFamily: fonts.medium, fontSize: 13, color: colors.onSurface },
+
+  nav: { flexDirection: "row", backgroundColor: colors.surfaceSecondary, borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: 8 },
+  navItem: { flex: 1, alignItems: "center", justifyContent: "center", gap: 2, minHeight: 44 },
+  navLabel: { fontFamily: fonts.medium, fontSize: 11 },
 
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" },
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingHorizontal: spacing.lg, paddingTop: 10 },

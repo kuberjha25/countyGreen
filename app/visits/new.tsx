@@ -28,8 +28,8 @@ export default function ScheduleVisit() {
   const qc = useQueryClient();
   const [f, setF] = useState(
     params.demo === "1"
-      ? { visitor_type: "Client", full_name: "Priya Nair", mobile: "87654 32109", email: "priya.nair@example.com", address: "45, Sector 9", city: "Panchkula", state: "Haryana", project: "County Green", visit_date: nextDays(3)[2].label, visit_time: "11:00 AM", notes: "Client wants to see the club house and sample layout." }
-      : { visitor_type: "Client", full_name: params.name ?? "", mobile: params.mobile ?? "", email: "", address: "", city: "", state: "", project: "County Green", visit_date: "", visit_time: "", notes: "" },
+      ? { visitor_type: "Client", full_name: "Priya Nair", mobile: "87654 32109", email: "priya.nair@example.com", address: "45, Sector 9", city: "Panchkula", state: "Haryana", project: "County Greens", visit_date: nextDays(3)[2].label, visit_time: "11:00 AM", notes: "Client wants to see the club house and sample layout." }
+      : { visitor_type: "Client", full_name: params.name ?? "", mobile: params.mobile ?? "", email: "", address: "", city: "", state: "", project: "County Greens", visit_date: "", visit_time: "", notes: "" },
   );
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   const [created, setCreated] = useState<any>(null);
@@ -57,7 +57,7 @@ export default function ScheduleVisit() {
       submitLabel="Confirm visit"
       success={{
         title: "Visit Scheduled",
-        body: "The County Green site team has been notified. You'll receive a reminder before the visit.",
+        body: "The County Greens site team has been notified. You'll receive a reminder before the visit.",
         meta: created ? [{ label: "Visitor", value: created.full_name }, { label: "Date", value: created.visit_date }, { label: "Time", value: created.visit_time }] : [],
         primary: { label: "View visit", onPress: () => router.replace(`/visits/${created?.id}`), testID: "visit-success-view" },
         secondary: { label: "Back to visits", onPress: () => router.replace("/(tabs)/visits"), testID: "visit-success-back" },
@@ -88,7 +88,7 @@ export default function ScheduleVisit() {
                 <Field label="City" placeholder="Enter city" value={f.city} onChangeText={set("city")} containerStyle={{ flex: 1 }} testID="visit-city-input" />
                 <View style={{ flex: 1 }}><Select label="State" value={f.state} options={STATES} onChange={set("state")} placeholder="Select state" testID="visit-state-select" /></View>
               </View>
-              <Select label="Project" value={f.project} options={["County Green"]} onChange={set("project")} icon="home-outline" testID="visit-project-select" />
+              <Select label="Project" value={f.project} options={["County Greens"]} onChange={set("project")} icon="home-outline" testID="visit-project-select" />
             </View>
           ),
         },

@@ -8,13 +8,13 @@ import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboa
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { post } from "@/src/api";
-import { PARTNER_TYPES, STATES } from "@/src/brand";
-import { Button, Field, Header, OptionTile, ScreenTitle, SectionLabel, Select, useScreenStyles } from "@/src/components/ui";
+import { PARTNER_TYPES, RERA_CERTIFICATE, STATES, partnerProfile } from "@/src/brand";
+import { Badge, Button, Field, Header, OptionTile, ScreenTitle, SectionLabel, Select, useScreenStyles } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-const EMPTY = { category: "", first_name: "", last_name: "", mobile: "", email: "", address: "", city: "", state: "", pincode: "", company: "", rera_number: "", project: "County Green", notes: "", facebook: "", instagram: "", youtube: "" };
-const DEMO = { ...EMPTY, category: "Influencer", first_name: "Rohit", last_name: "Mehra", mobile: "91234 56789", email: "rohit.mehra@example.com", address: "Plot 21, Phase 7", city: "Mohali", state: "Punjab", pincode: "160055", company: "Mehra Realty", rera_number: "RERA-PB-2026-311", instagram: "https://instagram.com/rohit.mehra", youtube: "https://youtube.com/@rohitmehra" };
+const EMPTY = { category: "", first_name: "", last_name: "", mobile: "", email: "", address: "", city: "", state: "", pincode: "", company: "", rera_file: "", project: "County Greens", notes: "", facebook: "", instagram: "", youtube: "" };
+const DEMO = { ...EMPTY, category: "Influencer", first_name: "Rohit", last_name: "Mehra", mobile: "91234 56789", email: "rohit.mehra@example.com", address: "Plot 21, Phase 7", city: "Mohali", state: "Punjab", pincode: "160055", instagram: "https://instagram.com/rohit.mehra", youtube: "https://youtube.com/@rohitmehra" };
 
 // Screen 11 · New Registration (single screen) + success state
 export default function NewRegistration() {
@@ -29,10 +29,19 @@ export default function NewRegistration() {
   const [f, setF] = useState(demo === "1" ? DEMO : EMPTY);
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const profile = partnerProfile(f.category || undefined);
   const [created, setCreated] = useState<any>(step === "success" ? { registration_no: "CG-REG-2026-0105", first_name: "Rohit", last_name: "Mehra", status: "Pending" } : null);
 
   const create = useMutation({
-    mutationFn: () => post("/registrations", { ...f, social: { facebook: f.facebook, instagram: f.instagram, youtube: f.youtube } }),
+    mutationFn: () => {
+      const { rera_file, facebook, instagram, youtube, ...rest } = f;
+      return post("/registrations", {
+        ...rest,
+        company: profile.entityLabel ? f.company : "",
+        social: profile.social ? { facebook, instagram, youtube } : {},
+        documents: profile.rera && rera_file ? [{ type: RERA_CERTIFICATE, status: "Under Review", file_name: rera_file }] : [],
+      });
+    },
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["registrations"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -49,8 +58,10 @@ export default function NewRegistration() {
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) e.email = "Enter a valid email";
     if (!f.city.trim()) e.city = "City is required";
     if (f.pincode && !/^\d{6}$/.test(f.pincode)) e.pincode = "Pincode must be 6 digits";
+    if (f.category && profile.rera === "required" && !f.rera_file) e.rera = "Upload the RERA certificate";
+    if (f.category && profile.social && !f.facebook.trim() && !f.instagram.trim() && !f.youtube.trim()) e.social = "Add at least one social media profile";
     setErrors(e);
-    if (Object.keys(e).length) return toast.show(e.category ?? "Please correct the highlighted fields", "error");
+    if (Object.keys(e).length) return toast.show(e.category ?? e.rera ?? "Please correct the highlighted fields", "error");
     create.mutate();
   };
 
@@ -61,7 +72,7 @@ export default function NewRegistration() {
         <Animated.View entering={FadeInDown.duration(500)} style={styles.successWrap}>
           <View style={styles.successIcon}><Ionicons name="checkmark" size={40} color={colors.forestDeep} /></View>
           <Text style={styles.successTitle}>Registration Submitted</Text>
-          <Text style={styles.successBody}>The registration is now pending verification by the County Green partner desk.</Text>
+          <Text style={styles.successBody}>The registration is now pending verification by the County Greens partner desk.</Text>
           <View style={styles.metaCard}>
             {[{ l: "Registration no.", v: created.registration_no }, { l: "Name", v: `${created.first_name} ${created.last_name}` }, { l: "Status", v: created.status }].map((m) => (
               <View key={m.l} style={[s.between, { paddingVertical: 6 }]}><Text style={styles.metaLabel}>{m.l.toUpperCase()}</Text><Text style={styles.metaValue}>{m.v}</Text></View>
@@ -80,7 +91,7 @@ export default function NewRegistration() {
     <View style={s.screen} testID="new-registration-screen">
       <Header title="New Registration" showBell={false} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <ScreenTitle title="New Registration" subtitle="Register a channel partner, broker, influencer or freelancer with County Green." />
+        <ScreenTitle title="New Registration" subtitle="Register a channel partner, broker, influencer or freelancer with County Greens." />
 
         <SectionLabel>Category</SectionLabel>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
@@ -110,14 +121,46 @@ export default function NewRegistration() {
         <Select label="State" value={f.state} options={STATES} onChange={set("state")} placeholder="Select state" testID="reg-state" />
 
         <SectionLabel>Professional Details</SectionLabel>
-        <Field label="Company / Firm" placeholder="Company Name" value={f.company} onChangeText={set("company")} icon="business-outline" testID="reg-company" />
-        <Field label="RERA number" placeholder="RERA-PB-XXXX-XXX" value={f.rera_number} onChangeText={set("rera_number")} autoCapitalize="characters" icon="ribbon-outline" testID="reg-rera" />
-        <Select label="Project" value={f.project} options={["County Green"]} onChange={set("project")} icon="home-outline" testID="reg-project" />
+        {profile.entityLabel ? <Field label="Company / Firm" placeholder="Company Name" value={f.company} onChangeText={set("company")} icon="business-outline" testID="reg-company" /> : null}
+        <Select label="Project" value={f.project} options={["County Greens"]} onChange={set("project")} icon="home-outline" testID="reg-project" />
 
-        <SectionLabel>Social Media</SectionLabel>
-        <Field label="Facebook" placeholder="Facebook profile link" value={f.facebook} onChangeText={set("facebook")} autoCapitalize="none" icon="logo-facebook" testID="reg-facebook" />
-        <Field label="Instagram" placeholder="Instagram profile link" value={f.instagram} onChangeText={set("instagram")} autoCapitalize="none" icon="logo-instagram" testID="reg-instagram" />
-        <Field label="YouTube" placeholder="YouTube channel link" value={f.youtube} onChangeText={set("youtube")} autoCapitalize="none" icon="logo-youtube" testID="reg-youtube" />
+        {f.category && profile.rera ? (
+          <>
+            <Text style={styles.fieldLabel}>{profile.rera === "optional" ? "RERA CERTIFICATE (OPTIONAL)" : "RERA CERTIFICATE"}</Text>
+            <View style={[styles.docRow, !!errors.rera && { borderColor: colors.error }]} testID="reg-rera-doc">
+              <View style={[styles.docIcon, !!f.rera_file && { backgroundColor: colors.forestSoft }]}>
+                <Ionicons name={f.rera_file ? "document-text" : "document-text-outline"} size={20} color={f.rera_file ? colors.brandPrimary : colors.muted} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.name}>{RERA_CERTIFICATE}</Text>
+                <Text style={s.meta}>{f.rera_file || "Upload the RERA registration certificate (PDF / image)"}</Text>
+                <View style={{ marginTop: 6 }}><Badge label={f.rera_file ? "Uploaded" : profile.rera === "required" ? "Required" : "Optional"} small /></View>
+              </View>
+              <Pressable
+                onPress={() => {
+                  set("rera_file")("rera-certificate.pdf");
+                  toast.show("RERA certificate attached", "success");
+                }}
+                style={({ pressed }) => [styles.uploadBtn, pressed && { opacity: 0.8 }]}
+                testID="reg-rera-upload"
+              >
+                <Ionicons name={f.rera_file ? "refresh-outline" : "cloud-upload-outline"} size={14} color={colors.brandPrimary} />
+                <Text style={styles.uploadText}>{f.rera_file ? "Replace" : "Upload"}</Text>
+              </Pressable>
+            </View>
+            {errors.rera ? <Text style={styles.err}>{errors.rera}</Text> : null}
+          </>
+        ) : null}
+
+        {profile.social && f.category ? (
+          <>
+            <SectionLabel style={{ marginTop: spacing.lg }}>Social Media</SectionLabel>
+            <Field label="Instagram" placeholder="Instagram profile link" value={f.instagram} onChangeText={set("instagram")} autoCapitalize="none" icon="logo-instagram" testID="reg-instagram" />
+            <Field label="YouTube" placeholder="YouTube channel link" value={f.youtube} onChangeText={set("youtube")} autoCapitalize="none" icon="logo-youtube" testID="reg-youtube" />
+            <Field label="Facebook" placeholder="Facebook profile link" value={f.facebook} onChangeText={set("facebook")} autoCapitalize="none" icon="logo-facebook" error={errors.social} testID="reg-facebook" />
+          </>
+        ) : null}
+        <View style={{ height: spacing.lg }} />
         <Field label="Notes" placeholder="Optional remarks" value={f.notes} onChangeText={set("notes")} multiline testID="reg-notes" />
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
@@ -131,6 +174,11 @@ export default function NewRegistration() {
 
 const useStyles = makeStyles((colors) => ({
   err: { fontFamily: fonts.body, fontSize: 12, color: colors.error, marginTop: 6 },
+  fieldLabel: { fontFamily: fonts.semibold, fontSize: 11, letterSpacing: 1.4, color: colors.onSurfaceTertiary, marginBottom: 8 },
+  docRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
+  docIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center" },
+  uploadBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, minHeight: 36, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.brandPrimary },
+  uploadText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.brandPrimary },
   scan: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: spacing.lg, padding: 14, borderRadius: radius.md, borderWidth: 1, borderColor: colors.brandSecondary, backgroundColor: colors.goldSoft },
   scanIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.surfaceInverse, alignItems: "center", justifyContent: "center" },
   footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.divider },

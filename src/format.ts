@@ -23,3 +23,22 @@ export function relTime(d?: string) {
 }
 
 export const slug = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+// Parses ISO strings and the "DD MMM YYYY" dates used by follow-ups / visits
+// (e.g. "05 Oct 2026", "05-Oct-2026") without relying on engine-specific Date parsing.
+export function parseDate(d?: string): Date | null {
+  if (!d) return null;
+  const m = d.match(/^(\d{1,2})[ /-]([A-Za-z]{3})[A-Za-z]*[ /-](\d{4})$/);
+  if (m) {
+    const month = MONTHS.indexOf(m[2].toLowerCase());
+    return month < 0 ? null : new Date(Number(m[3]), month, Number(m[1]));
+  }
+  const dt = new Date(d);
+  return isNaN(dt.getTime()) ? null : dt;
+}
+
+export function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}

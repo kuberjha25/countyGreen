@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
 import { img, LOGO_WHITE } from "@/src/brand";
-import { Badge, Button, Card, ErrorState, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { Badge, BottomNav, Button, Card, ErrorState, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 // Screen 29 · Project Overview
@@ -26,7 +26,7 @@ export default function Project() {
     <View style={s.screen} testID="project-screen">
       {projects.isLoading ? <Loading /> : projects.isError || !p ? <ErrorState message={(projects.error as Error)?.message ?? "Failed"} onRetry={projects.refetch} /> : (
         <>
-          <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={{ paddingBottom: spacing.lg }} showsVerticalScrollIndicator={false}>
             <View style={styles.hero}>
               <Image source={img(p.hero_image)} style={styles.fill} contentFit="cover" />
               <LinearGradient colors={[colors.scrimStart, colors.scrimEnd]} style={styles.fill} />
@@ -98,16 +98,17 @@ export default function Project() {
               </Card>
               <View style={[s.row, { gap: 8, marginTop: spacing.md }]}>
                 <Badge label={p.status} tone="gold" />
-                <Text style={s.caption}>Details marked {"\"To be announced\""} will be updated by County Green.</Text>
+                <Text style={s.caption}>Details marked {"\"To be announced\""} will be updated by County Greens.</Text>
               </View>
             </View>
           </ScrollView>
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 12, flexDirection: "row", gap: 10 }]}>
+          <View style={[styles.footer, { flexDirection: "row", gap: 10 }]}>
             <Button label="Brochure" variant="secondary" icon="document-text-outline" onPress={() => router.push("/documents")} style={{ flex: 1 }} testID="project-brochure-button" />
             <Button label="Schedule visit" variant="gold" icon="calendar-outline" onPress={() => router.push("/visits/new")} style={{ flex: 1.2 }} testID="project-schedule-button" />
           </View>
         </>
       )}
+      <BottomNav />
     </View>
   );
 }
@@ -128,5 +129,5 @@ const useStyles = makeStyles((colors) => ({
   amenityIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brandSecondary, alignItems: "center", justifyContent: "center" },
   amenityTitle: { fontFamily: fonts.displaySemi, fontSize: 17, lineHeight: 21, color: colors.onImage },
   galleryImg: { width: "31%", flexGrow: 1, height: 110, borderRadius: radius.md },
-  footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.divider },
+  footer: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.divider },
 }));

@@ -47,7 +47,7 @@ export default function Home() {
         <Pressable onPress={() => router.push("/(tabs)/profile")} style={[s.row, { gap: 10 }]} testID="home-avatar-button">
           <Avatar name={`${user?.first_name ?? "C"} ${user?.last_name ?? "G"}`} size={40} />
           <View>
-            <Text style={styles.partnerLabel}>CHANNEL PARTNER</Text>
+            <Text style={styles.partnerLabel}>{(user?.partner_type ?? "Channel Partner").toUpperCase()}</Text>
             <Text style={styles.partnerName} numberOfLines={1}>{`${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim() || "Partner"}</Text>
           </View>
         </Pressable>

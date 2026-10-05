@@ -7,13 +7,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get, patch } from "@/src/api";
 import { TIME_SLOTS } from "@/src/brand";
-import { Button, Field, Header, Loading, OptionTile, ScreenTitle, SectionLabel, Select, useScreenStyles } from "@/src/components/ui";
+import { Button, ChoiceChips, Field, Header, Loading, OptionTile, ScreenTitle, SectionLabel, Select, useScreenStyles } from "@/src/components/ui";
+import { useLookups } from "@/src/lookups";
 import { spacing } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-const STATUSES = ["In Progress", "Converted", "Not Matured"];
 const TEMPS = [{ k: "Hot", i: "flame-outline" }, { k: "Warm", i: "sunny-outline" }, { k: "Cold", i: "snow-outline" }] as const;
-const ACTIONS = ["Call back", "Share brochure", "Schedule project visit", "Send price list", "Negotiate & close", "No action required"];
 
 // Screen 14 · Update Lead
 export default function UpdateLead() {
@@ -23,6 +22,7 @@ export default function UpdateLead() {
   const router = useRouter();
   const toast = useToast();
   const qc = useQueryClient();
+  const lookups = useLookups();
   const lead = useQuery({ queryKey: ["lead", id], queryFn: () => get(`/leads/${id}`) });
   const [form, setForm] = useState({ status: "", temperature: "", follow_up_date: "", follow_up_time: "", next_action: "", notes: "", full_name: "", mobile: "", email: "" });
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -64,13 +64,13 @@ export default function UpdateLead() {
             <View style={{ flexDirection: "row", gap: 10, marginBottom: spacing.xl }}>
               {TEMPS.map((t) => <OptionTile key={t.k} label={t.k} icon={t.i} selected={form.temperature === t.k} onPress={() => set("temperature")(t.k)} testID={`temp-${t.k.toLowerCase()}`} style={{ flex: 1 }} />)}
             </View>
-            <Select label="Lead status" value={form.status} options={STATUSES} onChange={set("status")} testID="status-select" />
+            <ChoiceChips label="Lead status" value={form.status} options={lookups.lead_statuses} onChange={set("status")} testID="status" />
             <SectionLabel>Follow-up</SectionLabel>
             <View style={{ flexDirection: "row", gap: 10 }}>
               <Field label="Follow-up date" placeholder="DD MMM YYYY" value={form.follow_up_date} onChangeText={set("follow_up_date")} rightIcon="calendar-outline" error={dateErr} containerStyle={{ flex: 1.2 }} testID="followup-date-input" />
               <View style={{ flex: 1 }}><Select label="Time" value={form.follow_up_time} options={TIME_SLOTS} onChange={set("follow_up_time")} placeholder="Time" testID="followup-time-select" /></View>
             </View>
-            <Select label="Next action" value={form.next_action} options={ACTIONS} onChange={set("next_action")} placeholder="Select next action" icon="flag-outline" testID="next-action-select" />
+            <ChoiceChips label="Next action" value={form.next_action} options={lookups.next_actions} onChange={set("next_action")} testID="next-action" />
             <Field label="Notes" placeholder="Add notes about this lead…" value={form.notes} onChangeText={set("notes")} multiline testID="notes-input" />
             <SectionLabel>Customer Information</SectionLabel>
             <Field label="Full name" value={form.full_name} onChangeText={set("full_name")} icon="person-outline" testID="update-name-input" />

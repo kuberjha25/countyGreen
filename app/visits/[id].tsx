@@ -6,8 +6,9 @@ import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get, patch } from "@/src/api";
+import { useAuth } from "@/src/auth";
 import { SectionTabs, Timeline } from "@/src/components/sections";
-import { Avatar, Badge, Button, Card, ErrorState, Field, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { Avatar, Badge, BottomNav, Button, Card, ErrorState, Field, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
@@ -21,6 +22,7 @@ export default function VisitDetail() {
   const router = useRouter();
   const toast = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
   const visit = useQuery({ queryKey: ["visit", id], queryFn: () => get(`/visits/${id}`) });
   const v = visit.data;
   const [confirm, setConfirm] = useState(false);
@@ -43,7 +45,7 @@ export default function VisitDetail() {
       <Header title="Project Visit Details" />
       {visit.isLoading ? <Loading /> : visit.isError || !v ? <ErrorState message={(visit.error as Error)?.message ?? "Not found"} onRetry={visit.refetch} /> : (
         <>
-          <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={{ paddingBottom: spacing.lg }} showsVerticalScrollIndicator={false}>
             <View style={[s.content, { paddingBottom: 0 }]}>
               <View style={[s.row, { gap: 14, marginBottom: spacing.md }]}>
                 <Avatar name={v.full_name} size={56} />
@@ -67,10 +69,12 @@ export default function VisitDetail() {
                   <SectionLabel>Visit Information</SectionLabel>
                   <Card>
                     <InfoRow icon="home-outline" label="Project" value={v.project} />
-                    <InfoRow icon="location-outline" label="Site" value="County Green, New Chandigarh" />
+                    <InfoRow icon="location-outline" label="Site" value="County Greens, New Chandigarh" />
                     <InfoRow icon="flag-outline" label="Status" value={v.status} />
-                    <InfoRow icon="person-outline" label="Booked by" value="You (Channel Partner)" />
+                    <InfoRow icon="person-outline" label="Booked by" value={`You (${v.booked_by ?? user?.partner_type ?? "Channel Partner"})`} />
+                    <InfoRow icon="person-circle-outline" label="Assigned County Greens staff" value={v.assigned_to || "Not assigned yet"} testID="visit-assigned-staff" />
                   </Card>
+                  {v.lead_id ? <Button label="View related lead" icon="arrow-forward" variant="secondary" small onPress={() => router.push(`/leads/${v.lead_id}`)} style={{ marginTop: spacing.md }} testID="visit-view-lead-button" /> : null}
                 </View>
               ) },
               { key: "customer", label: "Customer", icon: "person-outline", render: () => (
@@ -100,7 +104,7 @@ export default function VisitDetail() {
               ) },
             ]} />
           </ScrollView>
-          <View style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}>
+          <View style={styles.footer}>
             {v.status === "In Progress" ? (
               <Button label="End current visit" icon="checkmark-done-outline" variant="gold" onPress={() => setConfirm(true)} testID="end-visit-button" />
             ) : (
@@ -121,6 +125,7 @@ export default function VisitDetail() {
           </Modal>
         </>
       )}
+      <BottomNav active="visits" />
     </View>
   );
 }
@@ -128,7 +133,7 @@ export default function VisitDetail() {
 const useStyles = makeStyles((colors) => ({
   call: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
   big: { fontFamily: fonts.displaySemi, fontSize: 20, color: colors.onSurface, marginTop: 2 },
-  footer: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.divider },
+  footer: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.divider },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" },
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg },
   handle: { alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 12 },

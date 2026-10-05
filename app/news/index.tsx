@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
 import { img } from "@/src/brand";
-import { Badge, ChipRow, EmptyState, ErrorState, Header, Loading, useScreenStyles } from "@/src/components/ui";
+import { Badge, BottomNav, ChipRow, EmptyState, ErrorState, Header, Loading, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -30,7 +30,7 @@ export default function News() {
     <View style={s.screen} testID="news-screen">
       <Header title="News Feed" />
       <View style={[s.content, { paddingBottom: 4 }]}>
-        <Text style={[s.h2, { fontSize: 30 }]}>Latest from County Green</Text>
+        <Text style={[s.h2, { fontSize: 30 }]}>Latest from County Greens</Text>
         <Text style={s.bodyMuted}>Project updates, announcements, events and marketing.</Text>
       </View>
       <ChipRow options={CATS} value={cat} onChange={setCat} testIDPrefix="news-cat" />
@@ -67,6 +67,7 @@ export default function News() {
           )}
         />
       )}
+      <BottomNav />
     </View>
   );
 }

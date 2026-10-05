@@ -8,11 +8,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get, put, User } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { Button, Field, Header, ScreenTitle, SectionLabel, Select, StepIndicator, useScreenStyles } from "@/src/components/ui";
+import { Button, Header, ScreenTitle, SectionLabel, Select, StepIndicator, useScreenStyles } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-// Screen 6 · Complete Profile · Step 2 (Employee & Social)
+// Screen 6 · Complete Profile · Step 3 (Associated County Greens employee).
+// Social media profiles are asked only of influencers, in step 2.
 export default function ProfileSocial() {
   const s = useScreenStyles();
   const styles = useStyles();
@@ -23,15 +24,12 @@ export default function ProfileSocial() {
   const { user, setUser } = useAuth();
   const [knows, setKnows] = useState<boolean>(user?.knows_employee ?? false);
   const [employee, setEmployee] = useState(user?.associated_employee ?? "");
-  const [fb, setFb] = useState(user?.social?.facebook ?? "");
-  const [ig, setIg] = useState(user?.social?.instagram ?? "");
-  const [yt, setYt] = useState(user?.social?.youtube ?? "");
   const [err, setErr] = useState<string | undefined>();
 
   const employees = useQuery({ queryKey: ["employees"], queryFn: () => get<{ name: string }[]>("/employees") });
 
   const save = useMutation({
-    mutationFn: () => put<User>("/me", { knows_employee: knows, associated_employee: knows ? employee : "", social: { facebook: fb.trim(), instagram: ig.trim(), youtube: yt.trim() }, profile_step: 3 }),
+    mutationFn: () => put<User>("/me", { knows_employee: knows, associated_employee: knows ? employee : "", profile_step: Math.max(user?.profile_step ?? 0, 3) }),
     onSuccess: (u) => {
       setUser(u);
       router.push("/(auth)/profile-company");
@@ -50,9 +48,9 @@ export default function ProfileSocial() {
       <Header showBell={false} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled">
         <StepIndicator step={3} total={4} />
-        <ScreenTitle title="Complete Profile" subtitle="Please fill in your details to get started" />
+        <ScreenTitle eyebrow={(user?.partner_type ?? "Channel Partner").toUpperCase()} title="Complete Profile" subtitle="Tell us if you already work with someone from the County Greens team." />
 
-        <SectionLabel>Do you know any County Green employee?</SectionLabel>
+        <SectionLabel>Do you know any County Greens employee?</SectionLabel>
         <View style={{ flexDirection: "row", gap: 10, marginBottom: spacing.xl }}>
           {[
             { v: true, label: "Yes", icon: "checkmark" as const },
@@ -77,10 +75,6 @@ export default function ProfileSocial() {
           </>
         ) : null}
 
-        <SectionLabel>Social Media Profiles</SectionLabel>
-        <Field label="Facebook" placeholder="Facebook Profile Link" value={fb} onChangeText={setFb} autoCapitalize="none" icon="logo-facebook" testID="facebook-input" />
-        <Field label="Instagram" placeholder="Instagram Profile Link" value={ig} onChangeText={setIg} autoCapitalize="none" icon="logo-instagram" testID="instagram-input" />
-        <Field label="YouTube" placeholder="YouTube Channel Link" value={yt} onChangeText={setYt} autoCapitalize="none" icon="logo-youtube" testID="youtube-input" />
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: insets.bottom + 16 }}>

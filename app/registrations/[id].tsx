@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
-import { Avatar, Badge, Button, Card, ErrorState, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { RERA_CERTIFICATE, partnerProfile } from "@/src/brand";
+import { Avatar, Badge, BottomNav, Button, Card, ErrorState, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -22,16 +22,17 @@ export default function RegistrationDetail() {
   const s = useScreenStyles();
   const styles = useStyles();
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const reg = useQuery({ queryKey: ["registration", id], queryFn: () => get(`/registrations/${id}`) });
   const r = reg.data;
+  const profile = partnerProfile(r?.category);
+  const rera = (r?.documents ?? []).find((d: any) => d.type === RERA_CERTIFICATE);
 
   return (
     <View style={s.screen} testID="registration-detail-screen">
       <Header title="Registration Details" />
       {reg.isLoading ? <Loading /> : reg.isError || !r ? <ErrorState message={(reg.error as Error)?.message ?? "Not found"} onRetry={reg.refetch} /> : (
-        <ScrollView contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
+        <ScrollView contentContainerStyle={[s.content, { paddingBottom: 24 }]} showsVerticalScrollIndicator={false}>
           <Animated.View entering={FadeInUp.duration(400)} style={styles.headerCard}>
             <View style={[s.row, { gap: 14 }]}>
               <Avatar name={`${r.first_name} ${r.last_name}`} size={60} tone="gold" />
@@ -63,12 +64,13 @@ export default function RegistrationDetail() {
             <SectionLabel style={{ marginTop: spacing.xl }}>Professional Details</SectionLabel>
             <Card>
               <InfoRow icon="pricetag-outline" label="Category" value={r.category} />
-              <InfoRow icon="business-outline" label="Company / Firm" value={r.company} />
-              <InfoRow icon="ribbon-outline" label="RERA number" value={r.rera_number} />
+              {profile.entityLabel ? <InfoRow icon="business-outline" label="Company / Firm" value={r.company} /> : null}
+              {profile.rera ? <InfoRow icon="ribbon-outline" label="RERA certificate" value={rera ? `Uploaded · ${rera.status}` : "Not uploaded"} /> : null}
               {r.notes ? <InfoRow icon="chatbox-ellipses-outline" label="Notes" value={r.notes} /> : null}
             </Card>
           </Animated.View>
 
+          {profile.social ? (
           <Animated.View entering={FadeInUp.delay(260).duration(400)}>
             <SectionLabel style={{ marginTop: spacing.xl }}>Social Media</SectionLabel>
             <View style={{ flexDirection: "row", gap: 10 }}>
@@ -84,10 +86,12 @@ export default function RegistrationDetail() {
               })}
             </View>
           </Animated.View>
+          ) : null}
 
           <Button label="Project overview" variant="secondary" icon="home-outline" onPress={() => router.push("/project")} style={{ marginTop: spacing.xl }} testID="registration-project-button" />
         </ScrollView>
       )}
+      <BottomNav />
     </View>
   );
 }

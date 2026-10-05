@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
 import { img } from "@/src/brand";
-import { Badge, ErrorState, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { Badge, BottomNav, ErrorState, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -32,7 +32,7 @@ export default function Article() {
             <LinearGradient colors={[colors.scrimStart, colors.scrimEnd]} style={styles.fill} />
             <View style={[styles.heroTop, { paddingTop: insets.top + 6 }]}>
               <Pressable onPress={() => router.back()} style={styles.circle} testID="article-back-button"><Ionicons name="arrow-back" size={20} color={colors.onSurface} /></Pressable>
-              <Pressable onPress={() => Share.share({ message: `${n.title} — County Green` })} style={styles.circle} testID="article-share-button"><Ionicons name="share-social-outline" size={18} color={colors.onSurface} /></Pressable>
+              <Pressable onPress={() => Share.share({ message: `${n.title} — County Greens` })} style={styles.circle} testID="article-share-button"><Ionicons name="share-social-outline" size={18} color={colors.onSurface} /></Pressable>
             </View>
             <View style={styles.heroText}>
               <Badge label={n.category} tone="gold" small />
@@ -52,7 +52,7 @@ export default function Article() {
             ))}
             <View style={styles.quote}>
               <Text style={styles.quoteText}>Home That Comes With More</Text>
-              <Text style={s.caption}>COUNTY GREEN · NEW CHANDIGARH</Text>
+              <Text style={s.caption}>COUNTY GREENS · NEW CHANDIGARH</Text>
             </View>
             {n.related?.length ? (
               <>
@@ -72,6 +72,7 @@ export default function Article() {
           </View>
         </ScrollView>
       )}
+      <BottomNav />
     </View>
   );
 }

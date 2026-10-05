@@ -123,6 +123,339 @@
 			"command": "Set-Location android; .\\gradlew.bat assembleRelease",
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Build County Green APK with EAS",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build",
+				"--platform",
+				"android",
+				"--profile",
+				"preview"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Inspect County Green EAS build",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"9728952b-15e7-42c3-bdfa-9692d24c5a98",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check latest County Green EAS build",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:list",
+				"--platform",
+				"android",
+				"--limit",
+				"1",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Retry County Green EAS APK",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build",
+				"--platform",
+				"android",
+				"--profile",
+				"preview",
+				"--non-interactive"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "List County Green EAS builds now",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:list",
+				"--platform",
+				"android",
+				"--limit",
+				"3",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Submit County Green EAS APK",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build",
+				"--platform",
+				"android",
+				"--profile",
+				"preview",
+				"--non-interactive",
+				"--no-wait"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check County Green APK result",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"ceea522b-2632-4975-a75b-2aabb92b8947",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Monitor County Green EAS APK",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"ceea522b-2632-4975-a75b-2aabb92b8947",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Refresh County Green EAS status",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"ceea522b-2632-4975-a75b-2aabb92b8947",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check County Green cloud build",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"ceea522b-2632-4975-a75b-2aabb92b8947",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Wait County Green EAS APK",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:wait",
+				"ceea522b-2632-4975-a75b-2aabb92b8947"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Final County Green EAS status",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"ceea522b-2632-4975-a75b-2aabb92b8947",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify County Green EAS APK",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"ceea522b-2632-4975-a75b-2aabb92b8947",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Get County Green APK artifact",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"ceea522b-2632-4975-a75b-2aabb92b8947",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Complete County Green EAS check",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"ceea522b-2632-4975-a75b-2aabb92b8947",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build County Green branded APK",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build",
+				"--platform",
+				"android",
+				"--profile",
+				"preview",
+				"--non-interactive",
+				"--no-wait"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Link County Green EAS project",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"project:init",
+				"--account",
+				"kuberjha1998",
+				"--force",
+				"--non-interactive",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Submit County Green branded APK",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build",
+				"--platform",
+				"android",
+				"--profile",
+				"preview",
+				"--non-interactive",
+				"--no-wait"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check County Green branded APK",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"77b3e881-6544-41ac-8227-bca7f33651e8",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Monitor County Green branded build",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"77b3e881-6544-41ac-8227-bca7f33651e8",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Refresh County Green APK build",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"77b3e881-6544-41ac-8227-bca7f33651e8",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Final County Green APK status",
+			"type": "shell",
+			"command": "npx",
+			"args": [
+				"--yes",
+				"eas-cli@latest",
+				"build:view",
+				"77b3e881-6544-41ac-8227-bca7f33651e8",
+				"--json"
+			],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }

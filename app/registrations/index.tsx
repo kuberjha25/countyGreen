@@ -7,7 +7,7 @@ import Animated, { FadeInUp } from "react-native-reanimated";
 
 import { get } from "@/src/api";
 import { PARTNER_TYPES } from "@/src/brand";
-import { Avatar, Badge, Button, EmptyState, ErrorState, FAB, Header, Loading, SearchBar, useScreenStyles } from "@/src/components/ui";
+import { Avatar, Badge, BottomNav, Button, EmptyState, ErrorState, FAB, Header, Loading, SearchBar, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -61,6 +61,7 @@ export default function Registrations() {
         </View>
         <SearchBar value={q} onChange={setQ} placeholder="Search by name or phone" testID="registrations-search" />
       </View>
+      <View style={{ flex: 1 }}>
       {regs.isLoading ? <Loading /> : regs.isError ? <ErrorState message={(regs.error as Error).message} onRetry={regs.refetch} /> : (
         <FlatList
           data={list}
@@ -88,6 +89,8 @@ export default function Registrations() {
         />
       )}
       <FAB onPress={() => router.push("/registrations/new")} testID="registrations-fab" />
+      </View>
+      <BottomNav />
     </View>
   );
 }

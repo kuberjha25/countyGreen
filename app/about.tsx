@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
 import { BRAND, img, LOGO } from "@/src/brand";
-import { Button, Card, ErrorState, Header, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { BottomNav, Button, Card, ErrorState, Header, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
 // Screen 28 · About Us
@@ -56,7 +56,7 @@ export default function About() {
               ))}
             </View>
 
-            <SectionLabel style={{ marginTop: spacing.xl }}>Life at County Green</SectionLabel>
+            <SectionLabel style={{ marginTop: spacing.xl }}>Life at County Greens</SectionLabel>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
               {a.images.map((k: string) => <Image key={k} source={img(k)} style={styles.grid} contentFit="cover" />)}
             </View>
@@ -81,6 +81,7 @@ export default function About() {
           </View>
         </ScrollView>
       )}
+      <BottomNav />
     </View>
   );
 }

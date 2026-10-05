@@ -3,17 +3,10 @@ import { Tabs } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { Platform } from "react-native";
 
+import { TABS } from "@/src/nav";
 import { fonts, useTheme } from "@/src/theme";
 
 const isIOS26 = Platform.OS === "ios" && parseInt(String(Platform.Version), 10) >= 26;
-
-const TABS = [
-  { name: "home", label: "Home", icon: "home-outline", active: "home", sf: "house" },
-  { name: "leads", label: "Leads", icon: "people-outline", active: "people", sf: "person.2" },
-  { name: "visits", label: "Visits", icon: "calendar-outline", active: "calendar", sf: "calendar" },
-  { name: "inventory", label: "Inventory", icon: "layers-outline", active: "layers", sf: "square.stack.3d.up" },
-  { name: "profile", label: "Profile", icon: "person-circle-outline", active: "person-circle", sf: "person.crop.circle" },
-] as const;
 
 export default function TabsLayout() {
   const { colors } = useTheme();

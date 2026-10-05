@@ -1,0 +1,28 @@
+# Keep the EAS upload aligned with the repository ignore rules.
+node_modules/
+.expo/
+.metro-cache/
+dist/
+web-build/
+expo-env.d.ts
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+.metro-health-check*
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.DS_Store
+*.pem
+.env*.local
+*.tsbuildinfo
+app-example
+
+# Local Gradle state and outputs can contain locked files during EAS archiving.
+android/.gradle/
+android/build/
+android/app/build/

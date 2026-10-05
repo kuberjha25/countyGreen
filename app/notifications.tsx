@@ -5,7 +5,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get, post } from "@/src/api";
-import { ChipRow, EmptyState, ErrorState, Header, Loading, useScreenStyles } from "@/src/components/ui";
+import { BottomNav, ChipRow, EmptyState, ErrorState, Header, Loading, useScreenStyles } from "@/src/components/ui";
 import { relTime } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -71,6 +71,7 @@ export default function Notifications() {
           ))}
         </ScrollView>
       )}
+      <BottomNav />
     </View>
   );
 }

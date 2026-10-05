@@ -5,7 +5,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
-import { Card, ErrorState, Header, Loading, SectionLabel, Stat, useScreenStyles } from "@/src/components/ui";
+import { BottomNav, Card, ErrorState, Header, Loading, SectionLabel, Stat, useScreenStyles } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
@@ -113,6 +113,7 @@ export default function Mis() {
           </Card>
         </ScrollView>
       )}
+      <BottomNav />
     </View>
   );
 }
