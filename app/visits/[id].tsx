@@ -6,13 +6,18 @@ import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get, patch } from "@/src/api";
-import { useAuth } from "@/src/auth";
+import { useCan } from "@/src/auth";
+import { partnerShort } from "@/src/brand";
 import { SectionTabs, Timeline } from "@/src/components/sections";
-import { Avatar, Badge, BottomNav, Button, Card, ErrorState, Field, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { Avatar, Badge, BottomNav, Button, Card, ChoiceChips, ErrorState, Field, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { maskedAadhaar, maskedMobile } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-// Screen 17 · Project Visit Details (sections: Visit · Customer · Notes · History) + End-visit confirmation sheet
+const STATUSES = ["In Progress", "Attended"];
+
+// Screen 17 · Project Visit Details (sections: Visit · Customer · Notes · History) + Update-status sheet.
+// Partners see it view-only; staff actions follow their role permissions.
 export default function VisitDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const s = useScreenStyles();
@@ -22,23 +27,30 @@ export default function VisitDetail() {
   const router = useRouter();
   const toast = useToast();
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const can = useCan();
   const visit = useQuery({ queryKey: ["visit", id], queryFn: () => get(`/visits/${id}`) });
   const v = visit.data;
   const [confirm, setConfirm] = useState(false);
+  const [status, setStatus] = useState("Attended");
   const [notes, setNotes] = useState("");
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["visit", id] });
+    qc.invalidateQueries({ queryKey: ["visits"] });
+    qc.invalidateQueries({ queryKey: ["dashboard"] });
+    qc.invalidateQueries({ queryKey: ["mis"] });
+  };
 
-  const end = useMutation({
-    mutationFn: () => patch(`/visits/${id}`, { status: "Attended", notes: notes || undefined }),
+  const update = useMutation({
+    mutationFn: () => patch(`/visits/${id}`, { status, notes: notes || undefined }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["visit", id] });
-      qc.invalidateQueries({ queryKey: ["visits"] });
-      qc.invalidateQueries({ queryKey: ["mis"] });
+      refresh();
       setConfirm(false);
-      toast.show("Visit marked as attended", "success");
+      setNotes("");
+      toast.show(`Visit marked as ${status}`, "success");
     },
     onError: (e: Error) => toast.show(e.message, "error"),
   });
+  const footer = can("visits", "modify") || can("visits", "add");
 
   return (
     <View style={s.screen} testID="visit-detail-screen">
@@ -56,7 +68,7 @@ export default function VisitDetail() {
                     <Badge label={v.visitor_type} tone="muted" small />
                   </View>
                 </View>
-                <Pressable onPress={() => Linking.openURL(`tel:${v.mobile.replace(/\s/g, "")}`)} style={styles.call} testID="visit-call-button"><Ionicons name="call" size={18} color={colors.onBrandPrimary} /></Pressable>
+                {v.mobile ? <Pressable onPress={() => Linking.openURL(`tel:${v.mobile.replace(/\s/g, "")}`)} style={styles.call} testID="visit-call-button"><Ionicons name="call" size={18} color={colors.onBrandPrimary} /></Pressable> : null}
               </View>
               <View style={{ flexDirection: "row", gap: 10, marginBottom: spacing.sm }}>
                 <Card style={{ flex: 1 }}><Text style={s.caption}>VISIT DATE</Text><Text style={styles.big}>{v.visit_date}</Text></Card>
@@ -69,10 +81,11 @@ export default function VisitDetail() {
                   <SectionLabel>Visit Information</SectionLabel>
                   <Card>
                     <InfoRow icon="home-outline" label="Project" value={v.project} />
-                    <InfoRow icon="location-outline" label="Site" value="County Greens, New Chandigarh" />
+                    <InfoRow icon="location-outline" label="Site" value="County Green, New Chandigarh" />
                     <InfoRow icon="flag-outline" label="Status" value={v.status} />
-                    <InfoRow icon="person-outline" label="Booked by" value={`You (${v.booked_by ?? user?.partner_type ?? "Channel Partner"})`} />
-                    <InfoRow icon="person-circle-outline" label="Assigned County Greens staff" value={v.assigned_to || "Not assigned yet"} testID="visit-assigned-staff" />
+                    <InfoRow icon="person-outline" label="Visit for" value={v.partner_type ? `${v.partner_name} · ${partnerShort(v.partner_type)}` : "Direct (no partner)"} />
+                    {v.created_by ? <InfoRow icon="create-outline" label="Scheduled by" value={v.created_by} /> : null}
+                    <InfoRow icon="person-circle-outline" label="Assigned County Green staff" value={v.assigned_to || "Not assigned yet"} testID="visit-assigned-staff" />
                   </Card>
                   {v.lead_id ? <Button label="View related lead" icon="arrow-forward" variant="secondary" small onPress={() => router.push(`/leads/${v.lead_id}`)} style={{ marginTop: spacing.md }} testID="visit-view-lead-button" /> : null}
                 </View>
@@ -81,7 +94,14 @@ export default function VisitDetail() {
                 <View style={s.content}>
                   <SectionLabel>Customer Information</SectionLabel>
                   <Card>
-                    <InfoRow icon="call-outline" label="Mobile" value={v.mobile} />
+                    {v.partner_id ? (
+                      <>
+                        <InfoRow icon="call-outline" label="Mobile (last 4 digits)" value={maskedMobile(v.mobile_last4)} />
+                        <InfoRow icon="card-outline" label="Aadhaar (last 4 digits)" value={maskedAadhaar(v.aadhaar_last4)} />
+                      </>
+                    ) : (
+                      <InfoRow icon="call-outline" label="Mobile" value={v.mobile} />
+                    )}
                     <InfoRow icon="mail-outline" label="Email" value={v.email} />
                     <InfoRow icon="location-outline" label="Address" value={[v.address, v.city, v.state].filter(Boolean).join(", ")} />
                     <InfoRow icon="pricetag-outline" label="Visitor type" value={v.visitor_type} />
@@ -104,21 +124,25 @@ export default function VisitDetail() {
               ) },
             ]} />
           </ScrollView>
-          <View style={styles.footer}>
-            {v.status === "In Progress" ? (
-              <Button label="End current visit" icon="checkmark-done-outline" variant="gold" onPress={() => setConfirm(true)} testID="end-visit-button" />
-            ) : (
-              <Button label="Schedule another visit" icon="calendar-outline" onPress={() => router.push({ pathname: "/visits/new", params: { name: v.full_name, mobile: v.mobile } })} testID="schedule-again-button" />
-            )}
-          </View>
+          {footer ? (
+            <View style={[styles.footer, { flexDirection: "row", gap: 10 }]}>
+              {can("visits", "modify") ? (
+                <Button label="Update status" icon="checkmark-done-outline" variant="gold" onPress={() => { setStatus(v.status === "In Progress" ? "Attended" : v.status); setConfirm(true); }} style={{ flex: 1 }} testID="end-visit-button" />
+              ) : null}
+              {can("visits", "add") && v.status !== "In Progress" && v.lead_id ? (
+                <Button label="Schedule again" icon="calendar-outline" variant="secondary" onPress={() => router.push({ pathname: "/visits/new", params: { lead_id: v.lead_id } })} style={{ flex: 1 }} testID="schedule-again-button" />
+              ) : null}
+            </View>
+          ) : null}
           <Modal visible={confirm} transparent animationType="fade" onRequestClose={() => setConfirm(false)}>
             <Pressable style={styles.backdrop} onPress={() => setConfirm(false)}>
               <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]} onPress={() => {}} testID="end-visit-sheet">
                 <View style={styles.handle} />
-                <Text style={styles.sheetTitle}>End this visit?</Text>
-                <Text style={[s.bodyMuted, { marginBottom: spacing.lg }]}>The visit will be marked as Attended and added to the customer{"'"}s history.</Text>
+                <Text style={styles.sheetTitle}>Update visit status</Text>
+                <Text style={[s.bodyMuted, { marginBottom: spacing.lg }]}>The change is recorded in the visit history and the partner sees the new status.</Text>
+                <ChoiceChips label="Status" value={status} options={STATUSES} onChange={setStatus} testID="visit-status" />
                 <Field label="Visit notes (optional)" placeholder="What was discussed?" value={notes} onChangeText={setNotes} multiline testID="end-visit-notes" />
-                <Button label="Confirm & end visit" variant="gold" onPress={() => end.mutate()} loading={end.isPending} testID="confirm-end-visit" />
+                <Button label="Save status" variant="gold" onPress={() => update.mutate()} loading={update.isPending} testID="confirm-end-visit" />
                 <Button label="Cancel" variant="ghost" small onPress={() => setConfirm(false)} style={{ marginTop: 8 }} testID="cancel-end-visit" />
               </Pressable>
             </Pressable>

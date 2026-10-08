@@ -6,7 +6,6 @@ import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboa
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get, patch } from "@/src/api";
-import { TIME_SLOTS } from "@/src/brand";
 import { Button, ChoiceChips, Field, Header, Loading, OptionTile, ScreenTitle, SectionLabel, Select, useScreenStyles } from "@/src/components/ui";
 import { useLookups } from "@/src/lookups";
 import { spacing } from "@/src/theme";
@@ -14,7 +13,7 @@ import { useToast } from "@/src/toast";
 
 const TEMPS = [{ k: "Hot", i: "flame-outline" }, { k: "Warm", i: "sunny-outline" }, { k: "Cold", i: "snow-outline" }] as const;
 
-// Screen 14 · Update Lead
+// Screen 14 · Update Lead — status, follow-up & notes (leads "modify" permission; customer details are in Edit Lead)
 export default function UpdateLead() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const s = useScreenStyles();
@@ -24,12 +23,12 @@ export default function UpdateLead() {
   const qc = useQueryClient();
   const lookups = useLookups();
   const lead = useQuery({ queryKey: ["lead", id], queryFn: () => get(`/leads/${id}`) });
-  const [form, setForm] = useState({ status: "", temperature: "", follow_up_date: "", follow_up_time: "", next_action: "", notes: "", full_name: "", mobile: "", email: "" });
+  const [form, setForm] = useState({ status: "", temperature: "", follow_up_date: "", follow_up_time: "", next_action: "", notes: "" });
   const set = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
   const [dateErr, setDateErr] = useState<string | undefined>();
 
   useEffect(() => {
-    if (lead.data) setForm({ status: lead.data.status, temperature: lead.data.temperature, follow_up_date: lead.data.follow_up_date ?? "", follow_up_time: lead.data.follow_up_time ?? "", next_action: lead.data.next_action ?? "", notes: lead.data.notes ?? "", full_name: lead.data.full_name, mobile: lead.data.mobile, email: lead.data.email ?? "" });
+    if (lead.data) setForm({ status: lead.data.status, temperature: lead.data.temperature, follow_up_date: lead.data.follow_up_date ?? "", follow_up_time: lead.data.follow_up_time ?? "", next_action: lead.data.next_action ?? "", notes: lead.data.notes ?? "" });
   }, [lead.data]);
 
   const save = useMutation({
@@ -68,14 +67,10 @@ export default function UpdateLead() {
             <SectionLabel>Follow-up</SectionLabel>
             <View style={{ flexDirection: "row", gap: 10 }}>
               <Field label="Follow-up date" placeholder="DD MMM YYYY" value={form.follow_up_date} onChangeText={set("follow_up_date")} rightIcon="calendar-outline" error={dateErr} containerStyle={{ flex: 1.2 }} testID="followup-date-input" />
-              <View style={{ flex: 1 }}><Select label="Time" value={form.follow_up_time} options={TIME_SLOTS} onChange={set("follow_up_time")} placeholder="Time" testID="followup-time-select" /></View>
+              <View style={{ flex: 1 }}><Select label="Time" value={form.follow_up_time} options={lookups.time_slots} onChange={set("follow_up_time")} placeholder="Time" testID="followup-time-select" /></View>
             </View>
             <ChoiceChips label="Next action" value={form.next_action} options={lookups.next_actions} onChange={set("next_action")} testID="next-action" />
             <Field label="Notes" placeholder="Add notes about this lead…" value={form.notes} onChangeText={set("notes")} multiline testID="notes-input" />
-            <SectionLabel>Customer Information</SectionLabel>
-            <Field label="Full name" value={form.full_name} onChangeText={set("full_name")} icon="person-outline" testID="update-name-input" />
-            <Field label="Mobile number" value={form.mobile} onChangeText={set("mobile")} keyboardType="phone-pad" icon="call-outline" testID="update-mobile-input" />
-            <Field label="Email address" value={form.email} onChangeText={set("email")} keyboardType="email-address" autoCapitalize="none" icon="mail-outline" testID="update-email-input" />
             <Text style={s.caption}>Every update is recorded in the lead{"'"}s activity history.</Text>
           </KeyboardAwareScrollView>
           <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>

@@ -8,7 +8,8 @@ import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
-import { useAuth } from "@/src/auth";
+import { isStaff } from "@/src/access";
+import { useAuth, useCan } from "@/src/auth";
 import { IMAGES, partnerProfile } from "@/src/brand";
 import { Avatar, Badge, Button, Card, InfoRow, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
@@ -24,20 +25,26 @@ export default function Profile() {
   const router = useRouter();
   const toast = useToast();
   const { user, signOut } = useAuth();
+  const can = useCan();
+  const staff = isStaff(user);
   const dash = useQuery({ queryKey: ["dashboard"], queryFn: () => get("/dashboard") });
   const [confirm, setConfirm] = useState(false);
   const name = `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim() || "Channel Partner";
-  const partnerType = user?.partner_type ?? "Channel Partner";
+  const partnerType = staff ? user?.role_name ?? "Staff" : user?.partner_type ?? "Channel Partner";
   const profile = partnerProfile(partnerType);
 
   const MENU = [
-    { label: "Edit profile", icon: "create-outline", route: "/(auth)/profile-type", testID: "menu-edit-profile" },
-    { label: "My documents", icon: "document-text-outline", route: "/(auth)/profile-company", testID: "menu-documents" },
-    { label: "MIS Report", icon: "stats-chart-outline", route: "/mis", testID: "menu-mis" },
+    { label: "Admin & Settings", icon: "settings-outline", route: "/admin", testID: "menu-admin", show: staff },
+    { label: "Edit profile", icon: "create-outline", route: "/(auth)/profile-type", testID: "menu-edit-profile", show: !staff },
+    { label: "My documents", icon: "document-text-outline", route: "/(auth)/profile-company", testID: "menu-documents", show: !staff },
+    { label: staff ? "Availability requests" : "My availability requests", icon: "hourglass-outline", route: "/availability", testID: "menu-availability", show: can("availability", "view") },
+    { label: "Birthday & anniversary greetings", icon: "gift-outline", route: "/greetings", testID: "menu-greetings", show: can("greetings", "view") },
+    { label: "Bulk lead upload", icon: "cloud-upload-outline", route: "/leads/bulk", testID: "menu-bulk", show: staff && can("leads", "add") },
+    { label: "MIS Report", icon: "stats-chart-outline", route: "/mis", testID: "menu-mis", show: can("mis", "view") },
     { label: "Notifications", icon: "notifications-outline", route: "/notifications", testID: "menu-notifications" },
-    { label: "About County Greens", icon: "leaf-outline", route: "/about", testID: "menu-about" },
+    { label: "About County Green", icon: "leaf-outline", route: "/about", testID: "menu-about" },
     { label: "Terms & Conditions", icon: "shield-checkmark-outline", route: "/terms", testID: "menu-terms" },
-  ] as const;
+  ].filter((m) => m.show !== false);
 
   return (
     <View style={s.screen} testID="profile-screen">
@@ -53,15 +60,15 @@ export default function Profile() {
             <Avatar name={name} size={64} tone="gold" />
             <View style={{ flex: 1 }}>
               <Text style={styles.name} testID="profile-name">{name}</Text>
-              <Text style={styles.sub}>{partnerType} · Partner ID CG-{(user?.id ?? "").slice(-6).toUpperCase()}</Text>
-              <View style={{ marginTop: 6 }}><Badge label={user?.profile_completed ? "Verified" : "Pending"} small /></View>
+              <Text style={styles.sub}>{partnerType} · {staff ? "Staff" : "Partner"} ID CG-{(user?.id ?? "").slice(-6).toUpperCase()}</Text>
+              <View style={{ marginTop: 6 }}><Badge label={staff ? "County Green Staff" : user?.profile_completed ? "Verified" : "Pending"} small /></View>
             </View>
           </View>
         </View>
 
         <View style={s.content}>
           <View style={{ flexDirection: "row", gap: 10, marginTop: -24 }}>
-            {[{ v: dash.data?.leads, l: "Leads", r: "/(tabs)/leads" }, { v: dash.data?.visits, l: "Visits", r: "/(tabs)/visits" }, { v: dash.data?.registrations, l: "Registrations", r: "/registrations" }].map((x) => (
+            {[{ v: dash.data?.leads, l: "Leads", r: "/(tabs)/leads" }, { v: dash.data?.visits, l: "Visits", r: "/(tabs)/visits" }, staff ? { v: dash.data?.availability_pending, l: "Requests", r: "/availability" } : { v: dash.data?.leads_converted, l: "Converted", r: "/(tabs)/leads?status=Converted" }].map((x) => (
               <Pressable key={x.l} onPress={() => router.push(x.r as any)} style={styles.stat} testID={`profile-stat-${x.l.toLowerCase()}`}>
                 <Text style={styles.statValue}>{x.v ?? "—"}</Text>
                 <Text style={styles.statLabel}>{x.l.toUpperCase()}</Text>
@@ -71,15 +78,16 @@ export default function Profile() {
 
           <View style={[s.between, { marginTop: spacing.xl }]}>
             <SectionLabel style={{ marginBottom: 0, marginTop: 0 }}>Personal Information</SectionLabel>
-            <Pressable onPress={() => router.push("/(auth)/profile-type")} style={s.row} testID="profile-edit-button"><Ionicons name="pencil-outline" size={13} color={colors.brandPrimary} /><Text style={[s.link, { marginLeft: 4 }]}>Edit</Text></Pressable>
+            {staff ? null : <Pressable onPress={() => router.push("/(auth)/profile-type")} style={s.row} testID="profile-edit-button"><Ionicons name="pencil-outline" size={13} color={colors.brandPrimary} /><Text style={[s.link, { marginLeft: 4 }]}>Edit</Text></Pressable>}
           </View>
           <Card style={{ marginTop: spacing.md }}>
             <InfoRow icon="call-outline" label="Mobile number" value={user?.phone} />
             <InfoRow icon="mail-outline" label="Email address" value={user?.email} />
-            <InfoRow icon="location-outline" label="City" value={[user?.city, user?.state].filter(Boolean).join(", ")} />
+            {staff ? null : <InfoRow icon="location-outline" label="City" value={[user?.city, user?.state].filter(Boolean).join(", ")} />}
             <InfoRow icon="calendar-outline" label="Member since" value={fmtDate(user?.created_at)} />
           </Card>
 
+          {staff ? null : (<>
           <SectionLabel style={{ marginTop: spacing.xl }}>Professional Information</SectionLabel>
           <Card>
             <InfoRow icon="pricetag-outline" label="Partner type" value={partnerType} />
@@ -103,12 +111,13 @@ export default function Profile() {
               </View>
             )) : <Text style={s.bodyMuted}>No documents uploaded yet.</Text>}
           </Card>
+          </>)}
 
           <SectionLabel style={{ marginTop: spacing.xl }}>Settings & More</SectionLabel>
           <Card style={{ padding: 4 }}>
             {MENU.map((m, i) => (
               <Pressable key={m.label} onPress={() => router.push(m.route as any)} style={[styles.menu, i < MENU.length - 1 && styles.menuBorder]} testID={m.testID}>
-                <Ionicons name={m.icon} size={18} color={colors.brandPrimary} />
+                <Ionicons name={m.icon as any} size={18} color={colors.brandPrimary} />
                 <Text style={styles.menuText}>{m.label}</Text>
                 <Ionicons name="chevron-forward" size={16} color={colors.muted} />
               </Pressable>
@@ -116,7 +125,7 @@ export default function Profile() {
           </Card>
 
           <Button label="Log out" variant="danger" icon="log-out-outline" onPress={() => setConfirm(true)} style={{ marginTop: spacing.xl }} testID="logout-button" />
-          <Text style={[s.caption, { textAlign: "center", marginTop: spacing.lg }]}>County Greens Partner App · v1.0.0</Text>
+          <Text style={[s.caption, { textAlign: "center", marginTop: spacing.lg }]}>County Green Partner App · v1.0.0</Text>
         </View>
       </ScrollView>
 
@@ -124,7 +133,7 @@ export default function Profile() {
         <Pressable style={styles.backdrop} onPress={() => setConfirm(false)}>
           <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]} onPress={() => {}} testID="logout-sheet">
             <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>Log out of County Greens?</Text>
+            <Text style={styles.sheetTitle}>Log out of County Green?</Text>
             <Text style={[s.bodyMuted, { marginBottom: spacing.lg }]}>You{"'"}ll need to verify your mobile number again to sign back in.</Text>
             <Button label="Log out" variant="danger" onPress={async () => { setConfirm(false); await signOut(); toast.show("You have been logged out", "info"); router.replace("/(auth)/login"); }} testID="confirm-logout-button" />
             <Button label="Cancel" variant="ghost" small onPress={() => setConfirm(false)} style={{ marginTop: 8 }} testID="cancel-logout-button" />

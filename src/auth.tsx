@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
+import { Action, can, ModuleKey } from "@/src/access";
 import { get, TOKEN_KEY, User } from "@/src/api";
 import { storage } from "@/src/utils/storage";
 
@@ -63,4 +64,10 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth outside AuthProvider");
   return ctx;
+}
+
+// can("leads", "add") for the signed-in user (staff role or the partner role).
+export function useCan() {
+  const { user } = useAuth();
+  return useCallback((module: ModuleKey, action: Action) => can(user, module, action), [user]);
 }

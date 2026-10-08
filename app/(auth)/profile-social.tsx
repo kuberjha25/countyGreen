@@ -12,7 +12,7 @@ import { Button, Header, ScreenTitle, SectionLabel, Select, StepIndicator, useSc
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-// Screen 6 · Complete Profile · Step 3 (Associated County Greens employee).
+// Screen 6 · Complete Profile · Step 3 (Associated County Green employee).
 // Social media profiles are asked only of influencers, in step 2.
 export default function ProfileSocial() {
   const s = useScreenStyles();
@@ -48,9 +48,9 @@ export default function ProfileSocial() {
       <Header showBell={false} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled">
         <StepIndicator step={3} total={4} />
-        <ScreenTitle eyebrow={(user?.partner_type ?? "Channel Partner").toUpperCase()} title="Complete Profile" subtitle="Tell us if you already work with someone from the County Greens team." />
+        <ScreenTitle eyebrow={(user?.partner_type ?? "Channel Partner").toUpperCase()} title="Complete Profile" subtitle="Tell us if you already work with someone from the County Green team." />
 
-        <SectionLabel>Do you know any County Greens employee?</SectionLabel>
+        <SectionLabel>Do you know any County Green employee?</SectionLabel>
         <View style={{ flexDirection: "row", gap: 10, marginBottom: spacing.xl }}>
           {[
             { v: true, label: "Yes", icon: "checkmark" as const },

@@ -7,6 +7,7 @@ import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-na
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
+import { useCan } from "@/src/auth";
 import { img, LOGO_WHITE } from "@/src/brand";
 import { Badge, BottomNav, Button, Card, ErrorState, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -19,6 +20,7 @@ export default function Project() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const can = useCan();
   const projects = useQuery({ queryKey: ["projects"], queryFn: () => get<any[]>("/projects") });
   const p = projects.data?.[0];
 
@@ -98,13 +100,17 @@ export default function Project() {
               </Card>
               <View style={[s.row, { gap: 8, marginTop: spacing.md }]}>
                 <Badge label={p.status} tone="gold" />
-                <Text style={s.caption}>Details marked {"\"To be announced\""} will be updated by County Greens.</Text>
+                <Text style={s.caption}>Details marked {"\"To be announced\""} will be updated by County Green.</Text>
               </View>
             </View>
           </ScrollView>
           <View style={[styles.footer, { flexDirection: "row", gap: 10 }]}>
             <Button label="Brochure" variant="secondary" icon="document-text-outline" onPress={() => router.push("/documents")} style={{ flex: 1 }} testID="project-brochure-button" />
-            <Button label="Schedule visit" variant="gold" icon="calendar-outline" onPress={() => router.push("/visits/new")} style={{ flex: 1.2 }} testID="project-schedule-button" />
+            {can("visits", "add") ? (
+              <Button label="Schedule visit" variant="gold" icon="calendar-outline" onPress={() => router.push("/visits/new")} style={{ flex: 1.2 }} testID="project-schedule-button" />
+            ) : (
+              <Button label="Our products" variant="gold" icon="map-outline" onPress={() => router.push("/(tabs)/products")} style={{ flex: 1.2 }} testID="project-products-button" />
+            )}
           </View>
         </>
       )}

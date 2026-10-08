@@ -98,7 +98,7 @@ export default function ProfileAddon() {
             <Select label="State" value={state} options={STATES} onChange={setState} placeholder="State" testID="state-select" />
           </View>
         </View>
-        <Text style={s.caption}>These details help the County Greens sales team route the right projects and clients to you.</Text>
+        <Text style={s.caption}>These details help the County Green sales team route the right projects and clients to you.</Text>
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: insets.bottom + 16, gap: 10 }}>

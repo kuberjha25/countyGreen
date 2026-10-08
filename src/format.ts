@@ -42,3 +42,35 @@ export function parseDate(d?: string): Date | null {
 export function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
+
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// "09 Oct 2026" — the format used for follow-ups, visits, birthdays and anniversaries.
+export function fmtDay(d: Date) {
+  return `${String(d.getDate()).padStart(2, "0")} ${MON[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+export const digits = (v?: string) => (v ?? "").replace(/\D/g, "");
+export const isLast4 = (v?: string) => /^\d{4}$/.test(v ?? "");
+
+// CP / Freelancer / Influencer leads are identified by the last 4 digits of the
+// customer's mobile and Aadhaar only — the full number is never captured.
+export const maskedMobile = (last4?: string) => (last4 ? `XXXXXX${last4}` : "");
+export const maskedAadhaar = (last4?: string) => (last4 ? `XXXX XXXX ${last4}` : "");
+export const contactOf = (r?: { mobile?: string; mobile_last4?: string }) => r?.mobile || maskedMobile(r?.mobile_last4);
+
+// Number in the international format wa.me expects (10-digit Indian numbers get 91).
+export function waNumber(v?: string) {
+  const d = digits(v);
+  return d.length === 10 ? `91${d}` : d;
+}
+
+// Days until the next yearly occurrence of a date (0 = today), or null if unparsable.
+export function daysUntil(d?: string): number | null {
+  const date = parseDate(d);
+  if (!date) return null;
+  const today = startOfDay(new Date());
+  let next = new Date(today.getFullYear(), date.getMonth(), date.getDate());
+  if (next.getTime() < today.getTime()) next = new Date(today.getFullYear() + 1, date.getMonth(), date.getDate());
+  return Math.round((next.getTime() - today.getTime()) / 86400000);
+}

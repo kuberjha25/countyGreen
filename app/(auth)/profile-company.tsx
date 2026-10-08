@@ -8,14 +8,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { put, User } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { DocSpec, partnerDocuments } from "@/src/brand";
+import { regDocsFor } from "@/src/brand";
 import { Badge, Button, Header, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
+import { useRegDocs } from "@/src/lookups";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-type Doc = DocSpec & { file_name?: string };
-
-// Screen 7 · Complete Profile · Step 4 (Documents — list depends on partner type & entity).
+// Screen 7 · Complete Profile · Step 4 (Documents). Which documents are shown and which are
+// mandatory is set by Admin per partner type (Admin → CP Registration Documents).
 // RERA is collected only as an uploaded certificate, never as a typed number.
 export default function ProfileCompany() {
   const s = useScreenStyles();
@@ -26,16 +26,13 @@ export default function ProfileCompany() {
   const toast = useToast();
   const { user, setUser } = useAuth();
   const wasCompleted = !!user?.profile_completed;
-  const [docs, setDocs] = useState<Doc[]>(() =>
-    partnerDocuments(user?.partner_type, user?.entity_type).map((d) => {
-      const existing = user?.documents?.find((x) => x.type === d.type);
-      return existing ? { ...d, file_name: existing.file_name ?? "uploaded" } : d;
-    }),
-  );
+  const config = useRegDocs();
+  const [files, setFiles] = useState<Record<string, string>>(() => Object.fromEntries((user?.documents ?? []).map((d) => [d.type, d.file_name ?? "uploaded"])));
+  const docs = regDocsFor(config, user?.partner_type, user?.entity_type).map((d) => ({ ...d, file_name: files[d.type] }));
 
   // Demo upload: marks the document as uploaded (file picker to be wired to Object Storage).
-  const upload = (i: number) => {
-    setDocs((d) => d.map((x, idx) => (idx === i ? { ...x, file_name: `${x.type.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf` } : x)));
+  const upload = (type: string) => {
+    setFiles((f) => ({ ...f, [type]: `${type.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf` }));
     toast.show("Document attached", "success");
   };
 
@@ -89,7 +86,7 @@ export default function ProfileCompany() {
                     <Badge label={uploaded ? "Uploaded" : d.required ? "Required" : "Optional"} small />
                   </View>
                 </View>
-                <Pressable testID={`doc-upload-${i}`} onPress={() => upload(i)} style={({ pressed }) => [styles.uploadBtn, uploaded && styles.uploadBtnDone, pressed && { opacity: 0.8 }]}>
+                <Pressable testID={`doc-upload-${i}`} onPress={() => upload(d.type)} style={({ pressed }) => [styles.uploadBtn, uploaded && styles.uploadBtnDone, pressed && { opacity: 0.8 }]}>
                   <Ionicons name={uploaded ? "refresh-outline" : "cloud-upload-outline"} size={14} color={colors.brandPrimary} />
                   <Text style={styles.uploadText}>{uploaded ? "Replace" : "Upload"}</Text>
                 </Pressable>
@@ -97,7 +94,7 @@ export default function ProfileCompany() {
             );
           })}
         </View>
-        <Text style={[s.caption, { marginTop: spacing.lg }]}>Documents are verified by the County Greens partner desk within 2–3 working days.</Text>
+        <Text style={[s.caption, { marginTop: spacing.lg }]}>Documents are verified by the County Green partner desk within 2–3 working days.</Text>
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: insets.bottom + 16 }}>

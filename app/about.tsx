@@ -56,7 +56,7 @@ export default function About() {
               ))}
             </View>
 
-            <SectionLabel style={{ marginTop: spacing.xl }}>Life at County Greens</SectionLabel>
+            <SectionLabel style={{ marginTop: spacing.xl }}>Life at County Green</SectionLabel>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
               {a.images.map((k: string) => <Image key={k} source={img(k)} style={styles.grid} contentFit="cover" />)}
             </View>

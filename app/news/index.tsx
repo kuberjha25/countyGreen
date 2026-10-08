@@ -30,7 +30,7 @@ export default function News() {
     <View style={s.screen} testID="news-screen">
       <Header title="News Feed" />
       <View style={[s.content, { paddingBottom: 4 }]}>
-        <Text style={[s.h2, { fontSize: 30 }]}>Latest from County Greens</Text>
+        <Text style={[s.h2, { fontSize: 30 }]}>Latest from County Green</Text>
         <Text style={s.bodyMuted}>Project updates, announcements, events and marketing.</Text>
       </View>
       <ChipRow options={CATS} value={cat} onChange={setCat} testIDPrefix="news-cat" />

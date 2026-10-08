@@ -5,7 +5,7 @@ import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
 
 import { get } from "@/src/api";
-import { RERA_CERTIFICATE, partnerProfile } from "@/src/brand";
+import { partnerProfile } from "@/src/brand";
 import { Avatar, Badge, BottomNav, Button, Card, ErrorState, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -26,7 +26,6 @@ export default function RegistrationDetail() {
   const reg = useQuery({ queryKey: ["registration", id], queryFn: () => get(`/registrations/${id}`) });
   const r = reg.data;
   const profile = partnerProfile(r?.category);
-  const rera = (r?.documents ?? []).find((d: any) => d.type === RERA_CERTIFICATE);
 
   return (
     <View style={s.screen} testID="registration-detail-screen">
@@ -65,8 +64,20 @@ export default function RegistrationDetail() {
             <Card>
               <InfoRow icon="pricetag-outline" label="Category" value={r.category} />
               {profile.entityLabel ? <InfoRow icon="business-outline" label="Company / Firm" value={r.company} /> : null}
-              {profile.rera ? <InfoRow icon="ribbon-outline" label="RERA certificate" value={rera ? `Uploaded · ${rera.status}` : "Not uploaded"} /> : null}
               {r.notes ? <InfoRow icon="chatbox-ellipses-outline" label="Notes" value={r.notes} /> : null}
+            </Card>
+            <SectionLabel style={{ marginTop: spacing.xl }}>Documents</SectionLabel>
+            <Card>
+              {(r.documents ?? []).length ? (
+                (r.documents ?? []).map((d: any) => (
+                  <View key={d.type} style={[s.between, { paddingVertical: 8 }]} testID={`registration-doc-${d.type.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+                    <Text style={[s.body, { fontSize: 14, flex: 1 }]}>{d.type}</Text>
+                    <Badge label={d.status} tone={d.status === "Verified" ? "success" : "warning"} small />
+                  </View>
+                ))
+              ) : (
+                <Text style={s.bodyMuted}>No documents uploaded.</Text>
+              )}
             </Card>
           </Animated.View>
 

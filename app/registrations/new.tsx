@@ -8,15 +8,17 @@ import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboa
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { post } from "@/src/api";
-import { PARTNER_TYPES, RERA_CERTIFICATE, STATES, partnerProfile } from "@/src/brand";
+import { PARTNER_TYPES, STATES, partnerProfile, regDocsFor } from "@/src/brand";
 import { Badge, Button, Field, Header, OptionTile, ScreenTitle, SectionLabel, Select, useScreenStyles } from "@/src/components/ui";
+import { useRegDocs } from "@/src/lookups";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-const EMPTY = { category: "", first_name: "", last_name: "", mobile: "", email: "", address: "", city: "", state: "", pincode: "", company: "", rera_file: "", project: "County Greens", notes: "", facebook: "", instagram: "", youtube: "" };
+const EMPTY = { category: "", first_name: "", last_name: "", mobile: "", email: "", address: "", city: "", state: "", pincode: "", company: "", project: "County Green", notes: "", facebook: "", instagram: "", youtube: "" };
 const DEMO = { ...EMPTY, category: "Influencer", first_name: "Rohit", last_name: "Mehra", mobile: "91234 56789", email: "rohit.mehra@example.com", address: "Plot 21, Phase 7", city: "Mohali", state: "Punjab", pincode: "160055", instagram: "https://instagram.com/rohit.mehra", youtube: "https://youtube.com/@rohitmehra" };
 
-// Screen 11 · New Registration (single screen) + success state
+// Screen 11 · New Registration (single screen) + success state. Documents follow the Admin
+// configuration (Admin → CP Registration Documents) for the selected category.
 export default function NewRegistration() {
   const s = useScreenStyles();
   const styles = useStyles();
@@ -30,16 +32,19 @@ export default function NewRegistration() {
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const profile = partnerProfile(f.category || undefined);
+  const config = useRegDocs();
+  const docs = f.category ? regDocsFor(config, f.category) : [];
+  const [files, setFiles] = useState<Record<string, string>>({});
   const [created, setCreated] = useState<any>(step === "success" ? { registration_no: "CG-REG-2026-0105", first_name: "Rohit", last_name: "Mehra", status: "Pending" } : null);
 
   const create = useMutation({
     mutationFn: () => {
-      const { rera_file, facebook, instagram, youtube, ...rest } = f;
+      const { facebook, instagram, youtube, ...rest } = f;
       return post("/registrations", {
         ...rest,
         company: profile.entityLabel ? f.company : "",
         social: profile.social ? { facebook, instagram, youtube } : {},
-        documents: profile.rera && rera_file ? [{ type: RERA_CERTIFICATE, status: "Under Review", file_name: rera_file }] : [],
+        documents: docs.filter((d) => files[d.type]).map((d) => ({ type: d.type, status: "Under Review", file_name: files[d.type] })),
       });
     },
     onSuccess: (r) => {
@@ -58,10 +63,11 @@ export default function NewRegistration() {
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) e.email = "Enter a valid email";
     if (!f.city.trim()) e.city = "City is required";
     if (f.pincode && !/^\d{6}$/.test(f.pincode)) e.pincode = "Pincode must be 6 digits";
-    if (f.category && profile.rera === "required" && !f.rera_file) e.rera = "Upload the RERA certificate";
+    const missing = docs.filter((d) => d.required && !files[d.type]);
+    if (missing.length) e.docs = `Please upload: ${missing.map((d) => d.type).join(", ")}`;
     if (f.category && profile.social && !f.facebook.trim() && !f.instagram.trim() && !f.youtube.trim()) e.social = "Add at least one social media profile";
     setErrors(e);
-    if (Object.keys(e).length) return toast.show(e.category ?? e.rera ?? "Please correct the highlighted fields", "error");
+    if (Object.keys(e).length) return toast.show(e.category ?? e.docs ?? "Please correct the highlighted fields", "error");
     create.mutate();
   };
 
@@ -72,7 +78,7 @@ export default function NewRegistration() {
         <Animated.View entering={FadeInDown.duration(500)} style={styles.successWrap}>
           <View style={styles.successIcon}><Ionicons name="checkmark" size={40} color={colors.forestDeep} /></View>
           <Text style={styles.successTitle}>Registration Submitted</Text>
-          <Text style={styles.successBody}>The registration is now pending verification by the County Greens partner desk.</Text>
+          <Text style={styles.successBody}>The registration is now pending verification by the County Green partner desk.</Text>
           <View style={styles.metaCard}>
             {[{ l: "Registration no.", v: created.registration_no }, { l: "Name", v: `${created.first_name} ${created.last_name}` }, { l: "Status", v: created.status }].map((m) => (
               <View key={m.l} style={[s.between, { paddingVertical: 6 }]}><Text style={styles.metaLabel}>{m.l.toUpperCase()}</Text><Text style={styles.metaValue}>{m.v}</Text></View>
@@ -91,7 +97,7 @@ export default function NewRegistration() {
     <View style={s.screen} testID="new-registration-screen">
       <Header title="New Registration" showBell={false} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <ScreenTitle title="New Registration" subtitle="Register a channel partner, broker, influencer or freelancer with County Greens." />
+        <ScreenTitle title="New Registration" subtitle="Register a channel partner, broker, influencer or freelancer with County Green." />
 
         <SectionLabel>Category</SectionLabel>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
@@ -122,33 +128,41 @@ export default function NewRegistration() {
 
         <SectionLabel>Professional Details</SectionLabel>
         {profile.entityLabel ? <Field label="Company / Firm" placeholder="Company Name" value={f.company} onChangeText={set("company")} icon="business-outline" testID="reg-company" /> : null}
-        <Select label="Project" value={f.project} options={["County Greens"]} onChange={set("project")} icon="home-outline" testID="reg-project" />
+        <Select label="Project" value={f.project} options={["County Green"]} onChange={set("project")} icon="home-outline" testID="reg-project" />
 
-        {f.category && profile.rera ? (
+        {docs.length ? (
           <>
-            <Text style={styles.fieldLabel}>{profile.rera === "optional" ? "RERA CERTIFICATE (OPTIONAL)" : "RERA CERTIFICATE"}</Text>
-            <View style={[styles.docRow, !!errors.rera && { borderColor: colors.error }]} testID="reg-rera-doc">
-              <View style={[styles.docIcon, !!f.rera_file && { backgroundColor: colors.forestSoft }]}>
-                <Ionicons name={f.rera_file ? "document-text" : "document-text-outline"} size={20} color={f.rera_file ? colors.brandPrimary : colors.muted} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.name}>{RERA_CERTIFICATE}</Text>
-                <Text style={s.meta}>{f.rera_file || "Upload the RERA registration certificate (PDF / image)"}</Text>
-                <View style={{ marginTop: 6 }}><Badge label={f.rera_file ? "Uploaded" : profile.rera === "required" ? "Required" : "Optional"} small /></View>
-              </View>
-              <Pressable
-                onPress={() => {
-                  set("rera_file")("rera-certificate.pdf");
-                  toast.show("RERA certificate attached", "success");
-                }}
-                style={({ pressed }) => [styles.uploadBtn, pressed && { opacity: 0.8 }]}
-                testID="reg-rera-upload"
-              >
-                <Ionicons name={f.rera_file ? "refresh-outline" : "cloud-upload-outline"} size={14} color={colors.brandPrimary} />
-                <Text style={styles.uploadText}>{f.rera_file ? "Replace" : "Upload"}</Text>
-              </Pressable>
+            <Text style={styles.fieldLabel}>DOCUMENTS</Text>
+            <View style={{ gap: 10 }}>
+              {docs.map((d) => {
+                const file = files[d.type];
+                const missing = !!errors.docs && d.required && !file;
+                return (
+                  <View key={d.type} style={[styles.docRow, missing && { borderColor: colors.error }]} testID={`reg-doc-${d.type.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+                    <View style={[styles.docIcon, !!file && { backgroundColor: colors.forestSoft }]}>
+                      <Ionicons name={file ? "document-text" : "document-text-outline"} size={20} color={file ? colors.brandPrimary : colors.muted} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.name}>{d.type}</Text>
+                      <Text style={s.meta}>{file || d.hint}</Text>
+                      <View style={{ marginTop: 6 }}><Badge label={file ? "Uploaded" : d.required ? "Required" : "Optional"} small /></View>
+                    </View>
+                    <Pressable
+                      onPress={() => {
+                        setFiles((x) => ({ ...x, [d.type]: `${d.type.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.pdf` }));
+                        toast.show(`${d.type} attached`, "success");
+                      }}
+                      style={({ pressed }) => [styles.uploadBtn, pressed && { opacity: 0.8 }]}
+                      testID={`reg-doc-upload-${d.type.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                    >
+                      <Ionicons name={file ? "refresh-outline" : "cloud-upload-outline"} size={14} color={colors.brandPrimary} />
+                      <Text style={styles.uploadText}>{file ? "Replace" : "Upload"}</Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
             </View>
-            {errors.rera ? <Text style={styles.err}>{errors.rera}</Text> : null}
+            {errors.docs ? <Text style={styles.err}>{errors.docs}</Text> : null}
           </>
         ) : null}
 

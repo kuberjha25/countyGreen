@@ -9,13 +9,16 @@ import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
-import { useAuth } from "@/src/auth";
+import { ADMIN_ROLE_ID, isStaff } from "@/src/access";
+import { useAuth, useCan } from "@/src/auth";
 import { BRAND, img, LEAF } from "@/src/brand";
 import { Avatar, Badge, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
-// Screen 8 · Registration Dashboard
+type Tile = { title: string; icon: string; value?: number; sub: string; pathname: string; params?: Record<string, string>; featured?: boolean; show?: boolean };
+
+// Screen 8 · Dashboard — every tile opens the matching detailed list (e.g. Converted Leads → converted lead listing).
 export default function Home() {
   const s = useScreenStyles();
   const styles = useStyles();
@@ -23,6 +26,8 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const can = useCan();
+  const staff = isStaff(user);
   const { width } = useWindowDimensions();
   const [slide, setSlide] = useState(0);
   const cardW = width - spacing.lg * 2;
@@ -32,14 +37,30 @@ export default function Home() {
   const project = d?.featured?.[0];
   const slides = project ? [{ image: project.hero_image, title: `${project.name} · ${project.status}`, sub: project.tagline }, ...(project.gallery ?? []).slice(0, 2).map((g: string, i: number) => ({ image: g, title: project.highlights?.[i + 1] ?? project.positioning, sub: project.location }))] : [{ image: "hero-security", title: `${BRAND.name} · ${BRAND.status}`, sub: BRAND.tagline }];
 
-  const WIDGETS = [
-    { title: "Total Leads", icon: "people-outline", value: d?.leads, sub: d ? `${d.leads_in_progress} in progress` : "", route: "/(tabs)/leads", featured: true },
-    { title: "Project Visit", icon: "calendar-outline", value: d?.visits, sub: d ? `${d.visits_upcoming} upcoming` : "", route: "/(tabs)/visits", featured: true },
-    { title: "Inventory", icon: "layers-outline", value: d?.units_available, sub: d ? `of ${d.units_total} units available` : "", route: "/(tabs)/inventory" },
-    { title: "Documents", icon: "document-text-outline", value: d?.documents, sub: "Brochures, plans & legal", route: "/documents" },
-    { title: "Projects", icon: "business-outline", value: d?.projects, sub: BRAND.location, route: "/project" },
-    { title: "MIS", icon: "stats-chart-outline", value: undefined, sub: "Performance report", route: "/mis" },
-  ] as const;
+  const LEADS = "/(tabs)/leads", VISITS = "/(tabs)/visits";
+  const tiles: Tile[] = (staff
+    ? [
+        { title: "Total Leads", icon: "people-outline", value: d?.leads, sub: "All leads", pathname: LEADS, params: { status: "All" }, featured: true },
+        { title: "Pending Visits", icon: "calendar-outline", value: d?.visits_upcoming, sub: d ? `of ${d.visits} project visits` : "", pathname: VISITS, params: { status: "In Progress" }, featured: true },
+        { title: "In Progress", icon: "hourglass-outline", value: d?.leads_in_progress, sub: "Leads being followed up", pathname: LEADS, params: { status: "In Progress" } },
+        { title: "Converted Leads", icon: "trophy-outline", value: d?.leads_converted, sub: "Converted lead listing", pathname: LEADS, params: { status: "Converted" } },
+        { title: "Not Matured", icon: "close-circle-outline", value: d?.leads_not_matured, sub: "Closed without sale", pathname: LEADS, params: { status: "Not Matured" } },
+        { title: "Attended Visits", icon: "checkmark-done-outline", value: d?.visits_attended, sub: "Completed site visits", pathname: VISITS, params: { status: "Attended" } },
+        { title: "Availability", icon: "map-outline", value: d?.availability, sub: "Availability requests", pathname: "/availability", show: can("availability", "view") },
+        { title: "Registrations", icon: "person-add-outline", value: d?.registrations_pending, sub: d ? `pending of ${d.registrations}` : "", pathname: "/registrations", params: { status: "Pending" }, show: can("registrations", "view") },
+        { title: "Documents", icon: "document-text-outline", value: d?.documents, sub: "Brochures, plans & legal", pathname: "/documents" },
+        { title: "MIS", icon: "stats-chart-outline", sub: "Reports", pathname: "/mis", show: can("mis", "view") },
+        { title: "Projects", icon: "business-outline", value: d?.projects, sub: BRAND.location, pathname: "/project" },
+      ]
+    : [
+        { title: "My Leads", icon: "people-outline", value: d?.leads, sub: d ? `${d.leads_in_progress} in progress` : "", pathname: LEADS, params: { status: "All" }, featured: true },
+        { title: "Project Visits", icon: "calendar-outline", value: d?.visits, sub: d ? `${d.visits_upcoming} upcoming` : "", pathname: VISITS, params: { status: "All" }, featured: true },
+        { title: "Converted Leads", icon: "trophy-outline", value: d?.leads_converted, sub: "Converted lead listing", pathname: LEADS, params: { status: "Converted" } },
+        { title: "Our Products", icon: "map-outline", value: d?.products, sub: "Request for availability", pathname: "/(tabs)/products" },
+        { title: "Documents", icon: "document-text-outline", value: d?.documents, sub: "Brochures, plans & legal", pathname: "/documents" },
+        { title: "MIS", icon: "stats-chart-outline", sub: "Performance report", pathname: "/mis", show: can("mis", "view") },
+      ]
+  ).filter((t) => t.show !== false);
 
   return (
     <View style={s.screen} testID="home-screen">
@@ -47,7 +68,7 @@ export default function Home() {
         <Pressable onPress={() => router.push("/(tabs)/profile")} style={[s.row, { gap: 10 }]} testID="home-avatar-button">
           <Avatar name={`${user?.first_name ?? "C"} ${user?.last_name ?? "G"}`} size={40} />
           <View>
-            <Text style={styles.partnerLabel}>{(user?.partner_type ?? "Channel Partner").toUpperCase()}</Text>
+            <Text style={styles.partnerLabel}>{(staff ? user?.role_name ?? "Staff" : user?.partner_type ?? "Channel Partner").toUpperCase()}</Text>
             <Text style={styles.partnerName} numberOfLines={1}>{`${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim() || "Partner"}</Text>
           </View>
         </Pressable>
@@ -86,16 +107,16 @@ export default function Home() {
 
         <View style={s.content}>
           <View style={[s.between, { marginBottom: spacing.md }]}>
-            <Text style={styles.sectionTitle}>Dashboard</Text>
+            <Text style={styles.sectionTitle}>{user?.role_id === ADMIN_ROLE_ID ? "Admin Dashboard" : "Dashboard"}</Text>
             <Text style={s.caption}>{fmtDate(new Date().toISOString())}</Text>
           </View>
 
           <View style={styles.grid}>
-            {WIDGETS.map((w, i) => {
-              const dark = "featured" in w && w.featured;
+            {tiles.map((w, i) => {
+              const dark = !!w.featured;
               return (
-                <Animated.View key={w.title} entering={FadeInUp.delay(80 * i).duration(450)} style={styles.gridItem}>
-                  <Pressable onPress={() => router.push(w.route as any)} style={({ pressed }) => [styles.widget, dark && styles.widgetDark, pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 }]} testID={`widget-${w.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                <Animated.View key={w.title} entering={FadeInUp.delay(60 * i).duration(450)} style={styles.gridItem}>
+                  <Pressable onPress={() => router.push({ pathname: w.pathname as any, params: w.params })} style={({ pressed }) => [styles.widget, dark && styles.widgetDark, pressed && { transform: [{ scale: 0.98 }], opacity: 0.95 }]} testID={`widget-${w.title.toLowerCase().replace(/\s+/g, "-")}`}>
                     <View style={[s.between, { alignItems: "flex-start" }]}>
                       <View style={[styles.widgetIcon, dark && { backgroundColor: colors.brandSecondary }]}>
                         <Ionicons name={w.icon as any} size={19} color={dark ? colors.forestDeep : colors.brandPrimary} />
@@ -103,8 +124,8 @@ export default function Home() {
                       <Ionicons name="arrow-forward" size={15} color={dark ? colors.onImageMuted : colors.muted} />
                     </View>
                     <View style={{ marginTop: spacing.md }}>
-                      {w.value !== undefined ? (
-                        <Text style={[styles.widgetValue, dark && { color: colors.onImage }]}>{dash.isLoading ? "—" : w.value}</Text>
+                      {w.pathname !== "/mis" ? (
+                        <Text style={[styles.widgetValue, dark && { color: colors.onImage }]}>{dash.isLoading || w.value === undefined ? "—" : w.value}</Text>
                       ) : (
                         <Text style={[styles.widgetValue, dark && { color: colors.onImage }, { fontSize: 22, lineHeight: 34 }]}>View</Text>
                       )}
@@ -117,7 +138,7 @@ export default function Home() {
             })}
           </View>
 
-          <Pressable onPress={() => router.push("/registrations")} style={({ pressed }) => [styles.regBanner, pressed && { opacity: 0.92 }]} testID="home-registrations-banner">
+          {staff || !can("registrations", "view") ? null : <Pressable onPress={() => router.push("/registrations")} style={({ pressed }) => [styles.regBanner, pressed && { opacity: 0.92 }]} testID="home-registrations-banner">
             <View style={[styles.widgetIcon, { backgroundColor: colors.goldSoft }]}>
               <Ionicons name="person-add-outline" size={19} color={colors.warning} />
             </View>
@@ -126,7 +147,7 @@ export default function Home() {
               <Text style={s.meta}>{d ? `${d.registrations} registered channel partners, brokers & influencers` : "Register channel partners, brokers & influencers"}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-          </Pressable>
+          </Pressable>}
 
           <View style={[s.between, { marginTop: spacing.xl, marginBottom: spacing.md }]}>
             <Text style={styles.sectionTitle}>Latest Updates</Text>

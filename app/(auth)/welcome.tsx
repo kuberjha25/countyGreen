@@ -54,7 +54,7 @@ export default function Welcome() {
         <Animated.View entering={FadeInUp.delay(600).duration(600)} style={styles.divider} />
         <Animated.View entering={FadeInUp.delay(750).duration(600)} style={{ alignItems: "center", gap: 6 }}>
           <Text style={styles.created}>Your Account has been Created</Text>
-          <Text style={styles.family}>Welcome to County Greens Family{user?.first_name ? `, ${user.first_name}` : ""}</Text>
+          <Text style={styles.family}>Welcome to County Green Family{user?.first_name ? `, ${user.first_name}` : ""}</Text>
         </Animated.View>
       </View>
 

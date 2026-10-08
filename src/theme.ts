@@ -35,7 +35,7 @@ import { Appearance, StyleSheet, useColorScheme } from "react-native";
 
 export type ColorScheme = "light" | "dark";
 
-// County Greens — Editorial Light. Ivory canvas, forest green primary, warm gold
+// County Green — Editorial Light. Ivory canvas, forest green primary, warm gold
 // accent, olive leaf as tertiary. Values from /app/design_guidelines.json.
 const light = {
   surface: "#F3F3E6",

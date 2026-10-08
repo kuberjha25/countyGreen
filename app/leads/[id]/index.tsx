@@ -6,16 +6,18 @@ import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native"
 import Animated, { FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { get, post } from "@/src/api";
+import { del, get, patch, post } from "@/src/api";
+import { useCan } from "@/src/auth";
 import { partnerShort } from "@/src/brand";
 import { Timeline } from "@/src/components/sections";
-import { Avatar, Badge, BottomNav, Button, Card, ErrorState, Field, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
-import { fmtDate, fmtDateTime } from "@/src/format";
-import { useLookups } from "@/src/lookups";
+import { Avatar, Badge, BottomNav, Button, Card, ConfirmSheet, ErrorState, Field, Header, InfoRow, Loading, PickerSheet, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { fmtDate, fmtDateTime, maskedAadhaar, maskedMobile } from "@/src/format";
+import { useLookups, useStaff } from "@/src/lookups";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-// Screen · Lead Detail (single consolidated screen) + "Request documents from CRM" sheet for converted leads
+// Screen · Lead Detail (single consolidated screen) + "Request documents from CRM" sheet for converted leads.
+// CP / Broker / Influencer / Freelancer logins see it view-only; staff actions follow their role permissions.
 export default function LeadDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const s = useScreenStyles();
@@ -26,6 +28,10 @@ export default function LeadDetail() {
   const toast = useToast();
   const qc = useQueryClient();
   const lookups = useLookups();
+  const can = useCan();
+  const staff = useStaff(can("leads", "reassign"));
+  const [reassigning, setReassigning] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const lead = useQuery({ queryKey: ["lead", id], queryFn: () => get(`/leads/${id}`) });
   const l = lead.data;
   const converted = l?.status === "Converted";
@@ -46,6 +52,33 @@ export default function LeadDetail() {
     },
     onError: (e: Error) => toast.show(e.message, "error"),
   });
+
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["lead", id] });
+    qc.invalidateQueries({ queryKey: ["leads"] });
+    qc.invalidateQueries({ queryKey: ["dashboard"] });
+    qc.invalidateQueries({ queryKey: ["mis"] });
+  };
+  const reassign = useMutation({
+    mutationFn: (staffId: string) => patch(`/leads/${id}`, { assigned_to_id: staffId }),
+    onSuccess: (x: any) => {
+      refresh();
+      toast.show(`Lead reassigned to ${x.assigned_to}`, "success");
+    },
+    onError: (e: Error) => toast.show(e.message, "error"),
+  });
+  const remove = useMutation({
+    mutationFn: () => del(`/leads/${id}`),
+    onSuccess: () => {
+      setDeleting(false);
+      refresh();
+      toast.show("Lead deleted", "success");
+      router.dismissTo("/(tabs)/leads");
+    },
+    onError: (e: Error) => toast.show(e.message, "error"),
+  });
+  const manage = can("leads", "edit") || can("leads", "reassign") || can("leads", "delete");
+  const footer = converted || can("visits", "add") || can("leads", "modify");
 
   const toggleDoc = (d: string) => setDocs((x) => (x.includes(d) ? x.filter((y) => y !== d) : [...x, d]));
 
@@ -86,20 +119,28 @@ export default function LeadDetail() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.ownerLabel}>LEAD BY</Text>
                     <View style={[s.row, { gap: 6, marginTop: 2, flexWrap: "wrap" }]}>
-                      {l.partner_type ? <Badge label={partnerShort(l.partner_type)} tone="gold" small /> : null}
-                      <Text style={styles.ownerValue}>{l.partner_name || "—"}</Text>
+                      {l.partner_type ? <Badge label={partnerShort(l.partner_type)} tone="gold" small /> : <Badge label="Direct" small />}
+                      <Text style={styles.ownerValue}>{l.partner_name || "Direct lead (no partner)"}</Text>
                     </View>
                     {l.partner_type ? <Text style={s.caption}>{l.partner_type}</Text> : null}
                   </View>
                 </View>
-                <InfoRow icon="person-circle-outline" label="Assigned County Greens staff" value={l.assigned_to || "Not assigned yet"} testID="lead-assigned-staff" />
+                <InfoRow icon="person-circle-outline" label="Assigned County Green staff" value={l.assigned_to || "Not assigned yet"} testID="lead-assigned-staff" />
+                {l.created_by ? <InfoRow icon="create-outline" label="Added by" value={l.created_by} /> : null}
               </Card>
             </Animated.View>
 
             <Animated.View entering={FadeInUp.delay(90).duration(400)}>
               <SectionLabel style={{ marginTop: spacing.xl }}>Customer Details</SectionLabel>
               <Card>
-                <InfoRow icon="call-outline" label="Mobile" value={l.mobile} />
+                {l.partner_id ? (
+                  <>
+                    <InfoRow icon="call-outline" label="Mobile (last 4 digits)" value={maskedMobile(l.mobile_last4)} testID="lead-mobile-last4" />
+                    <InfoRow icon="card-outline" label="Aadhaar (last 4 digits)" value={maskedAadhaar(l.aadhaar_last4)} testID="lead-aadhaar-last4" />
+                  </>
+                ) : (
+                  <InfoRow icon="call-outline" label="Mobile" value={l.mobile} />
+                )}
                 <InfoRow icon="mail-outline" label="Email" value={l.email} />
                 <InfoRow icon="location-outline" label="Address" value={[l.address, l.city, l.state].filter(Boolean).join(", ")} />
                 <InfoRow icon="calendar-clear-outline" label="Lead created" value={fmtDate(l.created_at)} />
@@ -150,22 +191,37 @@ export default function LeadDetail() {
               <SectionLabel style={{ marginTop: spacing.xl }}>Activity History</SectionLabel>
               <Card><Timeline items={l.history ?? []} /></Card>
             </Animated.View>
+
+            {manage ? (
+              <Animated.View entering={FadeInUp.delay(340).duration(400)}>
+                <SectionLabel style={{ marginTop: spacing.xl }}>Manage Lead</SectionLabel>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                  {can("leads", "edit") ? <Button label="Edit details" icon="create-outline" variant="secondary" small onPress={() => router.push(`/leads/${id}/edit`)} style={{ flexGrow: 1 }} testID="lead-edit-button" /> : null}
+                  {can("leads", "reassign") ? <Button label="Reassign" icon="swap-horizontal-outline" variant="secondary" small onPress={() => setReassigning(true)} loading={reassign.isPending} style={{ flexGrow: 1 }} testID="lead-reassign-button" /> : null}
+                  {can("leads", "delete") ? <Button label="Delete" icon="trash-outline" variant="danger" small onPress={() => setDeleting(true)} style={{ flexGrow: 1 }} testID="lead-delete-button" /> : null}
+                </View>
+              </Animated.View>
+            ) : null}
           </ScrollView>
-          <View style={styles.footer}>
-            {converted ? (
-              <Button label="Request docs" icon="document-attach-outline" variant="secondary" onPress={() => setRequesting(true)} style={{ flex: 1 }} testID="lead-request-docs-footer" />
-            ) : (
-              <Button label="Schedule visit" icon="calendar-outline" variant="secondary" onPress={() => router.push({ pathname: "/visits/new", params: { name: l.full_name, mobile: l.mobile, lead_id: l.id } })} style={{ flex: 1 }} testID="lead-schedule-visit-button" />
-            )}
-            <Button label="Update lead" icon="create-outline" onPress={() => router.push(`/leads/${id}/update`)} style={{ flex: 1 }} testID="lead-update-button" />
-          </View>
+          {footer ? (
+            <View style={styles.footer}>
+              {converted ? (
+                <Button label="Request docs" icon="document-attach-outline" variant="secondary" onPress={() => setRequesting(true)} style={{ flex: 1 }} testID="lead-request-docs-footer" />
+              ) : can("visits", "add") ? (
+                <Button label="Schedule visit" icon="calendar-outline" variant="secondary" onPress={() => router.push({ pathname: "/visits/new", params: { lead_id: l.id } })} style={{ flex: 1 }} testID="lead-schedule-visit-button" />
+              ) : null}
+              {can("leads", "modify") ? <Button label="Update lead" icon="create-outline" onPress={() => router.push(`/leads/${id}/update`)} style={{ flex: 1 }} testID="lead-update-button" /> : null}
+            </View>
+          ) : null}
+          <PickerSheet visible={reassigning} onClose={() => setReassigning(false)} title="Reassign lead to" value={l.assigned_to_id} options={(staff.data ?? []).map((x) => ({ value: x.id, label: x.name, sub: x.role_name }))} onPick={(v) => reassign.mutate(v)} testID="lead-reassign" />
+          <ConfirmSheet visible={deleting} onClose={() => setDeleting(false)} title="Delete this lead?" body={`${l.full_name} and its activity history will be removed. This cannot be undone.`} confirmLabel="Delete lead" danger onConfirm={() => remove.mutate()} loading={remove.isPending} testID="lead-delete" />
 
           <Modal visible={requesting} transparent animationType="fade" onRequestClose={() => setRequesting(false)}>
             <Pressable style={styles.backdrop} onPress={() => setRequesting(false)}>
               <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]} onPress={() => {}} testID="request-documents-sheet">
                 <View style={styles.handle} />
                 <Text style={styles.sheetTitle}>Request documents</Text>
-                <Text style={[s.bodyMuted, { marginBottom: spacing.md }]}>Your request for {l.full_name} goes to the County Greens CRM team. You{"'"}ll be notified when the documents are shared.</Text>
+                <Text style={[s.bodyMuted, { marginBottom: spacing.md }]}>Your request for {l.full_name} goes to the County Green CRM team. You{"'"}ll be notified when the documents are shared.</Text>
                 <ScrollView style={{ maxHeight: 280 }}>
                   {lookups.document_request_types.map((d) => {
                     const sel = docs.includes(d);

@@ -1,11 +1,12 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View, useWindowDimensions } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
 
 import { get } from "@/src/api";
+import { useCan } from "@/src/auth";
 import { PARTNER_TYPES } from "@/src/brand";
 import { Avatar, Badge, BottomNav, Button, EmptyState, ErrorState, FAB, Header, Loading, SearchBar, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
@@ -21,7 +22,9 @@ export default function Registrations() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const oneRow = width >= 380;
-  const [status, setStatus] = useState<(typeof STATUS)[number]>("Pending");
+  const can = useCan();
+  const params = useLocalSearchParams<{ status?: string }>();
+  const [status, setStatus] = useState<(typeof STATUS)[number]>(params.status === "Completed" ? "Completed" : "Pending");
   const [cat, setCat] = useState<string>("Channel Partner");
   const [q, setQ] = useState("");
   const regs = useQuery({ queryKey: ["registrations"], queryFn: () => get<any[]>("/registrations") });
@@ -31,7 +34,7 @@ export default function Registrations() {
 
   return (
     <View style={s.screen} testID="registrations-screen">
-      <Header title="Registrations" right={<Pressable onPress={() => router.push("/registrations/new")} style={styles.addBtn} testID="registrations-add-button"><Ionicons name="add" size={22} color={colors.onBrandSecondary} /></Pressable>} />
+      <Header title="Registrations" right={can("registrations", "add") ? <Pressable onPress={() => router.push("/registrations/new")} style={styles.addBtn} testID="registrations-add-button"><Ionicons name="add" size={22} color={colors.onBrandSecondary} /></Pressable> : undefined} />
       <View style={[s.content, { paddingBottom: spacing.sm }]}>
         <Text style={[s.h2, { fontSize: 30, marginBottom: spacing.md }]}>Registrations</Text>
 
@@ -69,7 +72,7 @@ export default function Registrations() {
           contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingTop: 4, paddingBottom: 100, gap: 10 }}
           refreshControl={<RefreshControl refreshing={regs.isRefetching} onRefresh={regs.refetch} tintColor={colors.brandPrimary} />}
           ListHeaderComponent={<Text style={[s.caption, { marginBottom: 4 }]}>{list.length} {status.toLowerCase()} · {cat}</Text>}
-          ListEmptyComponent={<EmptyState icon="person-add-outline" title={`No ${status.toLowerCase()} ${cat.toLowerCase()} registrations`} body="Register a new contact to see it here." action={<Button label="New registration" small onPress={() => router.push("/registrations/new")} testID="registrations-empty-add" />} />}
+          ListEmptyComponent={<EmptyState icon="person-add-outline" title={`No ${status.toLowerCase()} ${cat.toLowerCase()} registrations`} body="Register a new contact to see it here." action={can("registrations", "add") ? <Button label="New registration" small onPress={() => router.push("/registrations/new")} testID="registrations-empty-add" /> : undefined} />}
           renderItem={({ item: r }) => (
             <Pressable onPress={() => router.push(`/registrations/${r.id}`)} style={({ pressed }) => [styles.card, pressed && { opacity: 0.92 }]} testID={`registration-card-${r.id}`}>
               <Avatar name={`${r.first_name} ${r.last_name}`} tone="gold" />
@@ -88,7 +91,7 @@ export default function Registrations() {
           )}
         />
       )}
-      <FAB onPress={() => router.push("/registrations/new")} testID="registrations-fab" />
+      {can("registrations", "add") ? <FAB onPress={() => router.push("/registrations/new")} testID="registrations-fab" /> : null}
       </View>
       <BottomNav />
     </View>

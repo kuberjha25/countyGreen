@@ -386,6 +386,14 @@ const STATUS_TONE: Record<string, "success" | "warning" | "error" | "info" | "go
   Required: "error",
   Optional: "muted",
   "Current Visit": "gold",
+  Cancelled: "muted",
+  "Not Available": "error",
+  Closed: "muted",
+  Mandatory: "error",
+  Hidden: "muted",
+  Direct: "info",
+  Active: "success",
+  Inactive: "muted",
 };
 
 export function Badge({ label, tone, testID, small }: { label: string; tone?: keyof typeof TONES; testID?: string; small?: boolean }) {
@@ -591,6 +599,97 @@ export function FilterSheet({ visible, onClose, groups, value, onApply }: { visi
 }
 
 /* ------------------------------------------------------------------ */
+/* Bottom sheets                                                       */
+/* ------------------------------------------------------------------ */
+export function BottomSheet({ visible, onClose, title, subtitle, children, testID }: { visible: boolean; onClose: () => void; title: string; subtitle?: string; children: React.ReactNode; testID?: string }) {
+  const styles = useStyles();
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 16, maxHeight: "92%" }]} onPress={() => {}} testID={testID}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>{title}</Text>
+          {subtitle ? <Text style={[styles.subtitle, { marginTop: -6, marginBottom: spacing.md }]}>{subtitle}</Text> : null}
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">{children}</ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// Option picker opened from code (e.g. "Reassign to…"), with search for long lists.
+export function PickerSheet({ visible, onClose, title, options, value, onPick, testID = "picker" }: { visible: boolean; onClose: () => void; title: string; options: { value: string; label: string; sub?: string }[]; value?: string; onPick: (v: string) => void; testID?: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [q, setQ] = useState("");
+  const list = options.filter((o) => !q || `${o.label} ${o.sub ?? ""}`.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onShow={() => setQ("")}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]} onPress={() => {}} testID={`${testID}-sheet`}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>{title}</Text>
+          {options.length > 7 ? <View style={{ marginBottom: spacing.sm }}><SearchBar value={q} onChange={setQ} placeholder="Search" testID={`${testID}-search`} /></View> : null}
+          <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled">
+            {list.map((o) => {
+              const selected = o.value === value;
+              return (
+                <Pressable key={o.value} testID={`${testID}-option-${o.value}`} onPress={() => { onPick(o.value); onClose(); }} style={({ pressed }) => [styles.option, selected && styles.optionSelected, pressed && styles.pressed]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.optionText, selected && { color: colors.brandPrimary, fontFamily: fonts.semibold }]}>{o.label}</Text>
+                    {o.sub ? <Text style={styles.hintText}>{o.sub}</Text> : null}
+                  </View>
+                  {selected ? <Ionicons name="checkmark" size={18} color={colors.brandPrimary} /> : null}
+                </Pressable>
+              );
+            })}
+            {!list.length ? <Text style={[styles.hintText, { padding: 14 }]}>No matches.</Text> : null}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+export function ConfirmSheet({ visible, onClose, title, body, confirmLabel, onConfirm, loading, danger, testID = "confirm" }: { visible: boolean; onClose: () => void; title: string; body: string; confirmLabel: string; onConfirm: () => void; loading?: boolean; danger?: boolean; testID?: string }) {
+  const styles = useStyles();
+  return (
+    <BottomSheet visible={visible} onClose={onClose} title={title} testID={`${testID}-sheet`}>
+      <Text style={[styles.subtitle, { marginTop: 0, marginBottom: spacing.lg }]}>{body}</Text>
+      <Button label={confirmLabel} variant={danger ? "danger" : "gold"} onPress={onConfirm} loading={loading} testID={`${testID}-button`} />
+      <Button label="Cancel" variant="ghost" small onPress={onClose} style={{ marginTop: 8 }} testID={`${testID}-cancel`} />
+    </BottomSheet>
+  );
+}
+
+export function Segmented<T extends string>({ options, value, onChange, testIDPrefix = "segment", labels }: { options: readonly T[]; value: T; onChange: (v: T) => void; testIDPrefix?: string; labels?: Partial<Record<T, string>> }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <View style={styles.segment}>
+      {options.map((o) => (
+        <Pressable key={o} onPress={() => onChange(o)} style={[styles.segBtn, value === o && styles.segSel]} testID={`${testIDPrefix}-${o.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+          <Text style={[styles.segText, value === o && { color: colors.onBrandPrimary }]} numberOfLines={1}>{labels?.[o] ?? o}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+export function Checkbox({ checked, label, onPress, testID }: { checked: boolean; label?: string; onPress: () => void; testID?: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <Pressable onPress={onPress} hitSlop={8} style={[styles.checkRow]} testID={testID}>
+      <Ionicons name={checked ? "checkbox" : "square-outline"} size={22} color={checked ? colors.brandPrimary : colors.muted} />
+      {label ? <Text style={styles.optionText}>{label}</Text> : null}
+    </Pressable>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Footer navigation for internal screens (outside the tab bar)        */
 /* ------------------------------------------------------------------ */
 export function BottomNav({ active }: { active?: TabName }) {
@@ -663,6 +762,12 @@ const useStyles = makeStyles((colors) => ({
   option: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 14, borderRadius: radius.md },
   optionSelected: { backgroundColor: colors.forestSoft },
   optionText: { fontFamily: fonts.body, fontSize: 15, color: colors.onSurface },
+
+  segment: { flexDirection: "row", backgroundColor: colors.surfaceTertiary, borderRadius: radius.pill, padding: 3 },
+  segBtn: { flex: 1, height: 34, paddingHorizontal: 10, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  segSel: { backgroundColor: colors.brandPrimary },
+  segText: { fontFamily: fonts.medium, fontSize: 12, color: colors.onSurfaceTertiary },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 32 },
 
   chip: { height: 36, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, justifyContent: "center", flexShrink: 0 },
   chipSelected: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },

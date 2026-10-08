@@ -41,7 +41,7 @@ export default function Login() {
 
   const submit = () => {
     const digits = phone.replace(/\D/g, "");
-    if (digits.length < 8) return setError("Enter a valid mobile number");
+    if (digits.length !== 10) return setError("Enter a valid 10-digit mobile number");
     setError(undefined);
     request.mutate();
   };
@@ -64,7 +64,7 @@ export default function Login() {
         <View style={styles.form}>
           <Text style={styles.eyebrow}>LOGIN OR REGISTER</Text>
           <Text style={styles.h1}>Welcome</Text>
-          <Text style={styles.sub}>Enter your mobile number to login or register as a County Greens partner — Channel Partner, Broker, Influencer or Freelancer.</Text>
+          <Text style={styles.sub}>Enter your mobile number to login or register as a County Green partner — Channel Partner, Broker, Influencer or Freelancer.</Text>
 
           <Text style={styles.label}>MOBILE NUMBER</Text>
           <View style={{ flexDirection: "row", gap: 10 }}>
@@ -72,7 +72,7 @@ export default function Login() {
               <Select value={code} options={CODES} onChange={setCode} testID="country-code-select" />
             </View>
             <View style={{ flex: 1 }}>
-              <Field testID="phone-input" placeholder="Enter mobile number" keyboardType="phone-pad" value={phone} onChangeText={setPhone} error={error} maxLength={12} returnKeyType="done" onSubmitEditing={submit} />
+              <Field testID="phone-input" placeholder="10-digit mobile number" keyboardType="number-pad" value={phone} onChangeText={(v) => setPhone(v.replace(/\D/g, "").slice(0, 10))} error={error} maxLength={10} returnKeyType="done" onSubmitEditing={submit} />
             </View>
           </View>
           <View style={styles.hintRow}>

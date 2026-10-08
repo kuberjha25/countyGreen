@@ -1,116 +1,120 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, Share, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { get } from "@/src/api";
-import { BottomNav, Card, ErrorState, Header, Loading, SectionLabel, Stat, useScreenStyles } from "@/src/components/ui";
+import { BottomNav, Card, ChipRow, ErrorState, Header, Loading, SectionLabel, Segmented, useScreenStyles } from "@/src/components/ui";
+import { fmtDay } from "@/src/format";
+import { inPeriod, kpis, Link, MisData, Period, PERIODS, REPORTS, ReportRow, toCsv } from "@/src/reports";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-const PERIODS = ["daily", "weekly", "monthly"] as const;
+const ALL_STAFF = "All staff";
 
-function Ring({ value, label, tone }: { value: number; label: string; tone: string }) {
-  // Lightweight ring: thick circular border with a filled overlay proportional to value.
-  const styles = useStyles();
-  const { colors } = useTheme();
-  const pct = Math.max(0, Math.min(100, value));
-  return (
-    <View style={{ alignItems: "center", width: 96 }}>
-      <View style={styles.ring}>
-        <View style={[styles.ringFill, { borderColor: tone, opacity: pct === 0 ? 0 : 1, transform: [{ rotate: `${-90 + (pct / 100) * 180}deg` }] }]} />
-        <View style={styles.ringInner}>
-          <Text style={[styles.ringText, { color: colors.onSurface }]}>{pct}%</Text>
-        </View>
-      </View>
-      <Text style={styles.ringLabel}>{label.toUpperCase()}</Text>
-    </View>
-  );
-}
-
-function Bars({ rows, total }: { rows: { label: string; value: number; tone: string }[]; total: number }) {
+function Bars({ rows, onPress }: { rows: ReportRow[]; onPress: (l: Link) => void }) {
   const s = useScreenStyles();
   const styles = useStyles();
+  const { colors } = useTheme();
+  const total = rows.reduce((n, r) => n + r.value, 0);
+  const tones = [colors.brandPrimary, colors.brandSecondary, colors.brandTertiary, colors.warning, colors.info, colors.success];
+  if (!rows.length) return <Text style={s.caption}>No data in this period.</Text>;
   return (
-    <View style={{ flex: 1, gap: 10 }}>
-      {rows.map((r) => (
-        <View key={r.label}>
+    <View style={{ gap: 10 }}>
+      {rows.map((r, i) => (
+        <Pressable key={r.label} disabled={!r.link} onPress={() => r.link && onPress(r.link)} style={({ pressed }) => pressed && { opacity: 0.7 }} testID={`mis-row-${r.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
           <View style={s.between}>
-            <Text style={s.caption}>{r.label}</Text>
-            <Text style={[s.caption, { fontFamily: fonts.semibold }]}>{r.value}</Text>
+            <Text style={[s.caption, { flex: 1 }]} numberOfLines={1}>{r.label}</Text>
+            <Text style={[s.caption, { fontFamily: fonts.semibold, color: r.link ? colors.brandPrimary : colors.muted }]}>{r.value}{r.link ? "  ›" : ""}</Text>
           </View>
           <View style={styles.track}>
-            <View style={[styles.fill, { backgroundColor: r.tone, width: `${total ? Math.round((r.value / total) * 100) : 0}%` }]} />
+            <View style={[styles.fill, { backgroundColor: tones[i % tones.length], width: `${total ? Math.max(2, Math.round((r.value / total) * 100)) : 0}%` }]} />
           </View>
-        </View>
+        </Pressable>
       ))}
     </View>
   );
 }
 
-// Screen 19 · MIS Report
+// Screen 19 · MIS Report — built from the report registry in src/reports.ts; every figure links to its records.
 export default function Mis() {
   const s = useScreenStyles();
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const toast = useToast();
-  const [period, setPeriod] = useState<(typeof PERIODS)[number]>("monthly");
-  const mis = useQuery({ queryKey: ["mis", period], queryFn: () => get(`/mis?period=${period}`) });
-  const d = mis.data;
+  const [period, setPeriod] = useState<Period>("month");
+  const [staff, setStaff] = useState(ALL_STAFF);
+  const mis = useQuery({ queryKey: ["mis"], queryFn: () => get<MisData>("/mis") });
+  const all = mis.data;
+  const staffNames = useMemo(() => [ALL_STAFF, ...new Set((all?.leads ?? []).concat(all?.visits ?? []).map((x) => x.assigned_to).filter(Boolean))].sort((a, b) => (a === ALL_STAFF ? -1 : b === ALL_STAFF ? 1 : a.localeCompare(b))), [all]);
+  const d = all ? inPeriod(all, period, staff === ALL_STAFF ? undefined : staff) : undefined;
+  const reports = REPORTS.filter((r) => !r.staffOnly || all?.scope === "all");
+  const k = d ? kpis(d) : undefined;
+  const go = (l: Link) => router.push({ pathname: l.pathname as any, params: l.params });
+  const groups = [...new Set(reports.map((r) => r.group))];
+
+  const exportCsv = async () => {
+    if (!d) return;
+    const heading = `County Green MIS · ${PERIODS[period]}${staff !== ALL_STAFF ? ` · ${staff}` : ""} · ${fmtDay(new Date())}`;
+    try {
+      await Share.share({ title: "County Green MIS", message: toCsv(reports, d, heading) });
+    } catch {
+      toast.show("Sharing is not available on this device", "error");
+    }
+  };
 
   return (
     <View style={s.screen} testID="mis-screen">
       <Header title="MIS Report" />
-      {mis.isLoading ? <Loading /> : mis.isError || !d ? <ErrorState message={(mis.error as Error)?.message ?? "Failed"} onRetry={mis.refetch} /> : (
-        <ScrollView contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 24 }]} refreshControl={<RefreshControl refreshing={mis.isRefetching} onRefresh={mis.refetch} tintColor={colors.brandPrimary} />} showsVerticalScrollIndicator={false}>
-          <Text style={[s.h2, { fontSize: 30 }]}>Performance Summary</Text>
-          <View style={[s.between, { marginTop: spacing.md, marginBottom: spacing.lg }]}>
-            <View style={styles.segment}>
-              {PERIODS.map((p) => (
-                <Pressable key={p} onPress={() => setPeriod(p)} style={[styles.segBtn, period === p && styles.segSel]} testID={`mis-period-${p}`}>
-                  <Text style={[styles.segText, period === p && { color: colors.onBrandPrimary }]}>{p[0].toUpperCase() + p.slice(1)}</Text>
+      {mis.isLoading ? <Loading /> : mis.isError || !d || !k ? <ErrorState message={(mis.error as Error)?.message ?? "Failed"} onRetry={mis.refetch} /> : (
+        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }} refreshControl={<RefreshControl refreshing={mis.isRefetching} onRefresh={mis.refetch} tintColor={colors.brandPrimary} />} showsVerticalScrollIndicator={false}>
+          <View style={[s.content, { paddingBottom: spacing.sm }]}>
+            <View style={s.between}>
+              <Text style={[s.h2, { fontSize: 30 }]}>Performance</Text>
+              <Pressable onPress={exportCsv} style={styles.download} testID="mis-download-button">
+                <Ionicons name="share-outline" size={16} color={colors.brandSecondary} />
+                <Text style={styles.downloadText}>Export CSV</Text>
+              </Pressable>
+            </View>
+            <Text style={[s.bodyMuted, { marginBottom: spacing.md }]}>{all?.scope === "all" ? "All leads, visits and requests. Tap any figure to open the records." : "Your leads, visits and requests. Tap any figure to open the records."}</Text>
+            <Segmented options={Object.keys(PERIODS) as Period[]} labels={PERIODS} value={period} onChange={setPeriod} testIDPrefix="mis-period" />
+          </View>
+          {all?.scope === "all" && staffNames.length > 2 ? <ChipRow options={staffNames} value={staff} onChange={setStaff} testIDPrefix="mis-staff" /> : null}
+
+          <View style={s.content}>
+            <View style={styles.kpis}>
+              {[
+                { v: k.leads, l: "Total leads", link: { pathname: "/(tabs)/leads", params: { status: "All" } } },
+                { v: k.converted, l: `Converted · ${k.conversion}%`, link: { pathname: "/(tabs)/leads", params: { status: "Converted" } } },
+                { v: k.pendingVisits, l: "Pending visits", link: { pathname: "/(tabs)/visits", params: { status: "In Progress" } } },
+                { v: k.visits, l: `Visits · ${k.attendance}% attended`, link: { pathname: "/(tabs)/visits", params: { status: "All" } } },
+                { v: k.availabilityPending, l: "Pending availability", link: { pathname: "/availability", params: { status: "Pending" } } },
+              ].map((x) => (
+                <Pressable key={x.l} onPress={() => go(x.link)} style={({ pressed }) => [styles.kpi, pressed && { opacity: 0.85 }]} testID={`mis-kpi-${x.l.split(" ")[0].toLowerCase()}`}>
+                  <Text style={styles.kpiValue}>{x.v}</Text>
+                  <Text style={styles.kpiLabel}>{x.l.toUpperCase()}</Text>
                 </Pressable>
               ))}
             </View>
-            <Pressable onPress={() => toast.show("Report download will be available soon", "info")} style={styles.download} testID="mis-download-button">
-              <Ionicons name="download-outline" size={16} color={colors.brandSecondary} />
-              <Text style={styles.downloadText}>Export</Text>
-            </Pressable>
+
+            {groups.map((g) => (
+              <View key={g}>
+                <SectionLabel style={{ marginTop: spacing.xl }}>{g}</SectionLabel>
+                <View style={{ gap: 12 }}>
+                  {reports.filter((r) => r.group === g).map((r) => (
+                    <Card key={r.key} testID={`mis-report-${r.key}`}>
+                      <Text style={[s.name, { marginBottom: spacing.md }]}>{r.title}</Text>
+                      <Bars rows={r.rows(d)} onPress={go} />
+                    </Card>
+                  ))}
+                </View>
+              </View>
+            ))}
           </View>
-
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <Stat value={d.leads.total} label="Total leads" testID="stat-leads" />
-            <Stat value={d.visits.total} label="Total visits" tone="gold" testID="stat-visits" />
-            <Stat value={d.registrations.total} label="Registrations" tone="muted" testID="stat-registrations" />
-          </View>
-          <Text style={[s.caption, { marginTop: 8 }]}>{d.leads.recent} new lead{d.leads.recent === 1 ? "" : "s"} and {d.visits.recent} visit{d.visits.recent === 1 ? "" : "s"} added in this period.</Text>
-
-          <SectionLabel style={{ marginTop: spacing.xl }}>Conversion</SectionLabel>
-          <Card style={{ flexDirection: "row", justifyContent: "space-around", paddingVertical: spacing.xl }}>
-            <Ring value={d.conversion_rate} label="Lead conversion" tone={colors.brandPrimary} />
-            <Ring value={d.visit_rate} label="Visits attended" tone={colors.brandSecondary} />
-          </Card>
-
-          <SectionLabel style={{ marginTop: spacing.xl }}>Leads Summary</SectionLabel>
-          <Card>
-            <Bars total={d.leads.total} rows={[{ label: "In Progress", value: d.leads.in_progress, tone: colors.warning }, { label: "Converted", value: d.leads.converted, tone: colors.success }, { label: "Not Matured", value: d.leads.not_matured, tone: colors.muted }]} />
-          </Card>
-
-          <SectionLabel style={{ marginTop: spacing.xl }}>Visits Summary</SectionLabel>
-          <Card>
-            <Bars total={d.visits.total} rows={[{ label: "Attended", value: d.visits.attended, tone: colors.brandPrimary }, { label: "In Progress", value: d.visits.in_progress, tone: colors.brandSecondary }]} />
-          </Card>
-
-          <SectionLabel style={{ marginTop: spacing.xl }}>Registrations by Category</SectionLabel>
-          <Card>
-            <Bars total={d.registrations.total} rows={Object.entries(d.registrations.by_category ?? {}).map(([k, v]: any, i) => ({ label: k, value: v, tone: [colors.brandPrimary, colors.brandSecondary, colors.brandTertiary, colors.warning][i % 4] }))} />
-            <View style={[s.between, { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.divider }]}>
-              <Text style={s.caption}>Pending {d.registrations.pending}</Text>
-              <Text style={s.caption}>Completed {d.registrations.completed}</Text>
-            </View>
-          </Card>
         </ScrollView>
       )}
       <BottomNav />
@@ -119,17 +123,12 @@ export default function Mis() {
 }
 
 const useStyles = makeStyles((colors) => ({
-  segment: { flexDirection: "row", backgroundColor: colors.surfaceTertiary, borderRadius: radius.pill, padding: 3 },
-  segBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-  segSel: { backgroundColor: colors.brandPrimary },
-  segText: { fontFamily: fonts.medium, fontSize: 12, color: colors.onSurfaceTertiary },
   download: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.brandSecondary },
   downloadText: { fontFamily: fonts.semibold, fontSize: 12, color: colors.brandSecondary },
-  ring: { width: 84, height: 84, borderRadius: 42, borderWidth: 8, borderColor: colors.surfaceTertiary, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  ringFill: { position: "absolute", width: 84, height: 84, borderRadius: 42, borderWidth: 8, top: -8, left: -8, borderBottomColor: "transparent", borderLeftColor: "transparent" },
-  ringInner: { alignItems: "center", justifyContent: "center" },
-  ringText: { fontFamily: fonts.display, fontSize: 22 },
-  ringLabel: { fontFamily: fonts.semibold, fontSize: 9, letterSpacing: 1, color: colors.muted, marginTop: 8, textAlign: "center" },
+  kpis: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  kpi: { width: "47%", flexGrow: 1, backgroundColor: colors.surfaceSecondary, borderRadius: radius.md, padding: 14, borderWidth: 1, borderColor: colors.border },
+  kpiValue: { fontFamily: fonts.display, fontSize: 32, lineHeight: 36, color: colors.brandPrimary },
+  kpiLabel: { fontFamily: fonts.semibold, fontSize: 10, letterSpacing: 1, color: colors.muted, marginTop: 4 },
   track: { height: 8, borderRadius: 4, backgroundColor: colors.surfaceTertiary, marginTop: 6, overflow: "hidden" },
   fill: { height: 8, borderRadius: 4 },
 }));

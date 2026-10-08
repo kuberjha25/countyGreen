@@ -1,4 +1,5 @@
 import { storage } from "@/src/utils/storage";
+import type { Permissions } from "@/src/access";
 import { mockRequest } from "@/src/mock";
 
 export const TOKEN_KEY = "cg_access_token";
@@ -40,9 +41,15 @@ export const get = <T = any>(path: string) => api<T>(path);
 export const post = <T = any>(path: string, body?: unknown) => api<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined });
 export const put = <T = any>(path: string, body: unknown) => api<T>(path, { method: "PUT", body: JSON.stringify(body) });
 export const patch = <T = any>(path: string, body: unknown) => api<T>(path, { method: "PATCH", body: JSON.stringify(body) });
+export const del = <T = any>(path: string) => api<T>(path, { method: "DELETE" });
 
 export type User = {
   id: string;
+  kind?: "partner" | "staff"; // staff = County Green employees (incl. Admin)
+  role_id?: string;
+  role_name?: string;
+  permissions?: Permissions; // resolved from the role on every /me
+  active?: boolean;
   phone: string;
   country_code?: string;
   mobile?: string;
@@ -61,6 +68,8 @@ export type User = {
   documents?: { type: string; status: string; file_name?: string }[];
   city?: string;
   state?: string;
+  dob?: string; // "DD MMM YYYY" — used for birthday greetings
+  anniversary?: string;
   profile_step?: number;
   profile_completed?: boolean;
   created_at?: string;
