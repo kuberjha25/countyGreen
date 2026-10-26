@@ -8,6 +8,7 @@ import Animated, { Easing, FadeIn, FadeInDown, FadeInUp, useAnimatedStyle, useSh
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/auth";
+import { useAppSelector } from "@/src/store";
 import { BRAND, IMAGES, LEAF } from "@/src/brand";
 import { Button } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -19,6 +20,7 @@ export default function Welcome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const message = useAppSelector((st) => st.auth.registrationMessage);
   const scale = useSharedValue(0.2);
   const halo = useSharedValue(0.9);
 
@@ -53,13 +55,13 @@ export default function Welcome() {
         </Animated.View>
         <Animated.View entering={FadeInUp.delay(600).duration(600)} style={styles.divider} />
         <Animated.View entering={FadeInUp.delay(750).duration(600)} style={{ alignItems: "center", gap: 6 }}>
-          <Text style={styles.created}>Your Account has been Created</Text>
-          <Text style={styles.family}>Welcome to County Green Family{user?.first_name ? `, ${user.first_name}` : ""}</Text>
+          <Text style={styles.created}>{message ?? "Your Account has been Created"}</Text>
+          <Text style={styles.family}>Welcome to County Green Family{user?.name ? `, ${user.name.split(" ")[0]}` : ""}</Text>
         </Animated.View>
       </View>
 
       <Animated.View entering={FadeInUp.delay(950).duration(600)} style={[styles.footer, { paddingBottom: insets.bottom + 24 }]}>
-        <Button label="Let's get started" icon="arrow-forward" variant="gold" onPress={() => router.replace("/(tabs)/home")} testID="welcome-get-started-button" />
+        <Button label="Let's get started" icon="arrow-forward" variant="gold" onPress={() => router.replace(user ? "/(tabs)/home" : "/(auth)/login")} testID="welcome-get-started-button" />
         <Text style={styles.meta}>{BRAND.tagline.toUpperCase()}</Text>
       </Animated.View>
     </View>

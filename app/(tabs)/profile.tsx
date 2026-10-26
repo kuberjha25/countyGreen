@@ -1,22 +1,23 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { get } from "@/src/api";
+import { BASE_URL } from "@/src/api";
 import { isStaff } from "@/src/access";
-import { useAuth, useCan } from "@/src/auth";
-import { IMAGES, partnerProfile } from "@/src/brand";
+import { useAuth } from "@/src/auth";
+import { IMAGES, imageSource, partnerTypeName } from "@/src/brand";
 import { Avatar, Badge, Button, Card, InfoRow, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
+import { useAppSelector } from "@/src/store";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
+import { BUSINESS_TYPES, label } from "@/src/types";
 
-// Screen 25 · Profile
+// Screen 25 · Profile (GET /api/auth/profile)
 export default function Profile() {
   const s = useScreenStyles();
   const styles = useStyles();
@@ -24,27 +25,31 @@ export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
-  const { user, signOut } = useAuth();
-  const can = useCan();
+  const { user, stats, signOut } = useAuth();
+  const counts = useAppSelector((st) => st.dashboard.counts);
   const staff = isStaff(user);
-  const dash = useQuery({ queryKey: ["dashboard"], queryFn: () => get("/dashboard") });
   const [confirm, setConfirm] = useState(false);
-  const name = `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim() || "Channel Partner";
-  const partnerType = staff ? user?.role_name ?? "Staff" : user?.partner_type ?? "Channel Partner";
-  const profile = partnerProfile(partnerType);
+  const pp = user?.partner_profile;
+  const name = user?.name || "County Green";
+  const roleName = staff ? user?.role?.name ?? "Staff" : partnerTypeName(pp?.partner_type);
+  const photo = user?.profile_photo ? `${BASE_URL}/storage/${user.profile_photo}` : null;
 
   const MENU = [
     { label: "Admin & Settings", icon: "settings-outline", route: "/admin", testID: "menu-admin", show: staff },
-    { label: "Edit profile", icon: "create-outline", route: "/(auth)/profile-type", testID: "menu-edit-profile", show: !staff },
-    { label: "My documents", icon: "document-text-outline", route: "/(auth)/profile-company", testID: "menu-documents", show: !staff },
-    { label: staff ? "Availability requests" : "My availability requests", icon: "hourglass-outline", route: "/availability", testID: "menu-availability", show: can("availability", "view") },
-    { label: "Birthday & anniversary greetings", icon: "gift-outline", route: "/greetings", testID: "menu-greetings", show: can("greetings", "view") },
-    { label: "Bulk lead upload", icon: "cloud-upload-outline", route: "/leads/bulk", testID: "menu-bulk", show: staff && can("leads", "add") },
-    { label: "MIS Report", icon: "stats-chart-outline", route: "/mis", testID: "menu-mis", show: can("mis", "view") },
+    { label: "Edit profile", icon: "create-outline", route: "/profile-edit", testID: "menu-edit-profile" },
+    { label: "Registrations", icon: "person-add-outline", route: "/registrations", testID: "menu-registrations", show: staff },
+    { label: "Birthday & anniversary greetings", icon: "gift-outline", route: "/greetings", testID: "menu-greetings", show: staff },
+    { label: "MIS Report", icon: "stats-chart-outline", route: "/mis", testID: "menu-mis" },
     { label: "Notifications", icon: "notifications-outline", route: "/notifications", testID: "menu-notifications" },
     { label: "About County Green", icon: "leaf-outline", route: "/about", testID: "menu-about" },
     { label: "Terms & Conditions", icon: "shield-checkmark-outline", route: "/terms", testID: "menu-terms" },
   ].filter((m) => m.show !== false);
+
+  const tiles = [
+    { v: stats?.enquiries ?? counts?.leads, l: "Enquiries", r: { pathname: "/(tabs)/leads", params: { status: "all" } } },
+    { v: stats?.site_visits ?? counts?.visits, l: "Site visits", r: { pathname: "/(tabs)/visits", params: { status: "all" } } },
+    { v: stats?.bookings, l: "Bookings", r: { pathname: "/(tabs)/leads", params: { status: "booked" } } },
+  ];
 
   return (
     <View style={s.screen} testID="profile-screen">
@@ -57,19 +62,19 @@ export default function Profile() {
             <Pressable onPress={() => router.push("/notifications")} hitSlop={8} testID="profile-notifications-button"><Ionicons name="notifications-outline" size={22} color={colors.onImage} /></Pressable>
           </View>
           <View style={styles.heroBody}>
-            <Avatar name={name} size={64} tone="gold" />
+            {photo ? <Image source={imageSource(photo)} style={styles.photo} contentFit="cover" /> : <Avatar name={name} size={64} tone="gold" />}
             <View style={{ flex: 1 }}>
               <Text style={styles.name} testID="profile-name">{name}</Text>
-              <Text style={styles.sub}>{partnerType} · {staff ? "Staff" : "Partner"} ID CG-{(user?.id ?? "").slice(-6).toUpperCase()}</Text>
-              <View style={{ marginTop: 6 }}><Badge label={staff ? "County Green Staff" : user?.profile_completed ? "Verified" : "Pending"} small /></View>
+              <Text style={styles.sub}>{roleName} · ID CG-{String(user?.id ?? "").padStart(4, "0")}</Text>
+              <View style={{ marginTop: 6 }}><Badge label={staff ? "County Green Staff" : pp?.status === "completed" ? "Verified" : "Pending approval"} small /></View>
             </View>
           </View>
         </View>
 
         <View style={s.content}>
           <View style={{ flexDirection: "row", gap: 10, marginTop: -24 }}>
-            {[{ v: dash.data?.leads, l: "Leads", r: "/(tabs)/leads" }, { v: dash.data?.visits, l: "Visits", r: "/(tabs)/visits" }, staff ? { v: dash.data?.availability_pending, l: "Requests", r: "/availability" } : { v: dash.data?.leads_converted, l: "Converted", r: "/(tabs)/leads?status=Converted" }].map((x) => (
-              <Pressable key={x.l} onPress={() => router.push(x.r as any)} style={styles.stat} testID={`profile-stat-${x.l.toLowerCase()}`}>
+            {tiles.map((x) => (
+              <Pressable key={x.l} onPress={() => router.push(x.r as any)} style={styles.stat} testID={`profile-stat-${x.l.toLowerCase().replace(/\s+/g, "-")}`}>
                 <Text style={styles.statValue}>{x.v ?? "—"}</Text>
                 <Text style={styles.statLabel}>{x.l.toUpperCase()}</Text>
               </Pressable>
@@ -78,40 +83,47 @@ export default function Profile() {
 
           <View style={[s.between, { marginTop: spacing.xl }]}>
             <SectionLabel style={{ marginBottom: 0, marginTop: 0 }}>Personal Information</SectionLabel>
-            {staff ? null : <Pressable onPress={() => router.push("/(auth)/profile-type")} style={s.row} testID="profile-edit-button"><Ionicons name="pencil-outline" size={13} color={colors.brandPrimary} /><Text style={[s.link, { marginLeft: 4 }]}>Edit</Text></Pressable>}
+            <Pressable onPress={() => router.push("/profile-edit" as any)} style={s.row} testID="profile-edit-button"><Ionicons name="pencil-outline" size={13} color={colors.brandPrimary} /><Text style={[s.link, { marginLeft: 4 }]}>Edit</Text></Pressable>
           </View>
           <Card style={{ marginTop: spacing.md }}>
-            <InfoRow icon="call-outline" label="Mobile number" value={user?.phone} />
-            <InfoRow icon="mail-outline" label="Email address" value={user?.email} />
-            {staff ? null : <InfoRow icon="location-outline" label="City" value={[user?.city, user?.state].filter(Boolean).join(", ")} />}
+            <InfoRow icon="call-outline" label="Mobile number" value={user?.mobile} />
+            <InfoRow icon="mail-outline" label="Email address" value={user?.email ?? undefined} />
+            <InfoRow icon="location-outline" label="Address" value={[user?.address, user?.city, user?.state, user?.pincode].filter(Boolean).join(", ")} />
             <InfoRow icon="calendar-outline" label="Member since" value={fmtDate(user?.created_at)} />
           </Card>
 
-          {staff ? null : (<>
-          <SectionLabel style={{ marginTop: spacing.xl }}>Professional Information</SectionLabel>
-          <Card>
-            <InfoRow icon="pricetag-outline" label="Partner type" value={partnerType} />
-            {profile.entityLabel ? <InfoRow icon="git-network-outline" label="Entity type" value={user?.entity_type} /> : null}
-            {profile.entityLabel ? <InfoRow icon="business-outline" label="Company / Firm" value={user?.company_name} /> : null}
-            {profile.experience ? <InfoRow icon="briefcase-outline" label="Experience" value={user?.experience} /> : null}
-            {profile.specialisation ? <InfoRow icon="star-outline" label="Specialisation" value={user?.specialisation} /> : null}
-            {profile.social ? <InfoRow icon="logo-instagram" label="Instagram" value={user?.social?.instagram} /> : null}
-            {profile.social ? <InfoRow icon="logo-youtube" label="YouTube" value={user?.social?.youtube} /> : null}
-            {profile.social ? <InfoRow icon="logo-facebook" label="Facebook" value={user?.social?.facebook} /> : null}
-            {profile.social ? <InfoRow icon="people-circle-outline" label="Total followers" value={user?.followers} /> : null}
-            <InfoRow icon="people-outline" label="Associated employee" value={user?.associated_employee || "None"} />
-          </Card>
+          {pp ? (
+            <>
+              <SectionLabel style={{ marginTop: spacing.xl }}>Professional Information</SectionLabel>
+              <Card>
+                <InfoRow icon="pricetag-outline" label="Partner type" value={partnerTypeName(pp.partner_type)} />
+                {pp.company_name ? <InfoRow icon="business-outline" label="Company / Firm" value={pp.company_name} /> : null}
+                {pp.business_type ? <InfoRow icon="git-network-outline" label="Business type" value={label(BUSINESS_TYPES, pp.business_type)} /> : null}
+                {pp.partner_type === "influencer" ? (
+                  <>
+                    <InfoRow icon="logo-instagram" label="Instagram" value={pp.instagram_link ?? undefined} />
+                    <InfoRow icon="logo-youtube" label="YouTube" value={pp.youtube_link ?? undefined} />
+                    <InfoRow icon="logo-facebook" label="Facebook" value={pp.facebook_link ?? undefined} />
+                  </>
+                ) : null}
+                <InfoRow icon="people-outline" label="Associated employee" value={pp.employee_name || "None"} />
+              </Card>
 
-          <SectionLabel style={{ marginTop: spacing.xl }}>Documents</SectionLabel>
-          <Card>
-            {(user?.documents ?? []).length ? (user?.documents ?? []).map((d) => (
-              <View key={d.type} style={[s.between, { paddingVertical: 8 }]}>
-                <Text style={[s.body, { fontSize: 14, flex: 1 }]}>{d.type}</Text>
-                <Badge label={d.status} tone={d.status === "Verified" ? "success" : "warning"} small />
-              </View>
-            )) : <Text style={s.bodyMuted}>No documents uploaded yet.</Text>}
-          </Card>
-          </>)}
+              <SectionLabel style={{ marginTop: spacing.xl }}>Documents</SectionLabel>
+              <Card>
+                {(pp.documents ?? []).length ? (
+                  (pp.documents ?? []).map((d) => (
+                    <Pressable key={d.id} onPress={() => Linking.openURL(`${BASE_URL}/storage/${d.file_path}`)} style={[s.between, { paddingVertical: 8 }]} testID={`profile-doc-${d.id}`}>
+                      <Text style={[s.body, { fontSize: 14, flex: 1 }]}>{label({}, d.document_type)}</Text>
+                      <Badge label={label({}, d.status)} tone={/verified|approved/i.test(d.status) ? "success" : "warning"} small />
+                    </Pressable>
+                  ))
+                ) : (
+                  <Text style={s.bodyMuted}>No documents uploaded.</Text>
+                )}
+              </Card>
+            </>
+          ) : null}
 
           <SectionLabel style={{ marginTop: spacing.xl }}>Settings & More</SectionLabel>
           <Card style={{ padding: 4 }}>
@@ -157,6 +169,7 @@ const useStyles = makeStyles((colors) => ({
   statLabel: { fontFamily: fonts.semibold, fontSize: 9, letterSpacing: 1, color: colors.muted, marginTop: 2 },
   menu: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 12, minHeight: 48 },
   menuBorder: { borderBottomWidth: 1, borderBottomColor: colors.divider },
+  photo: { width: 64, height: 64, borderRadius: 32 },
   menuText: { flex: 1, fontFamily: fonts.medium, fontSize: 14, color: colors.onSurface },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" },
   sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.lg },

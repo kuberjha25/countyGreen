@@ -1,105 +1,94 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useQuery } from "@tanstack/react-query";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useEffect } from "react";
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
 
-import { get } from "@/src/api";
-import { partnerProfile } from "@/src/brand";
-import { Avatar, Badge, BottomNav, Button, Card, ErrorState, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
-import { fmtDate } from "@/src/format";
+import { Avatar, Badge, BottomNav, Card, ErrorState, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { useAppDispatch, useAppSelector } from "@/src/store";
+import { fetchRegistration } from "@/src/store/registrationsSlice";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
+import { label } from "@/src/types";
 
-const SOCIAL = [
-  { key: "facebook", label: "Facebook", icon: "logo-facebook" },
-  { key: "instagram", label: "Instagram", icon: "logo-instagram" },
-  { key: "youtube", label: "YouTube", icon: "logo-youtube" },
-] as const;
+const val = (v?: string) => (v && v !== "N/A" ? v : undefined);
 
-// Screen 10 · Registration Details (single consolidated screen)
+// Screen 10 · Registration Details (GET /api/registrations/{id} — display-ready, grouped).
 export default function RegistrationDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const s = useScreenStyles();
   const styles = useStyles();
   const { colors } = useTheme();
-  const router = useRouter();
-  const reg = useQuery({ queryKey: ["registration", id], queryFn: () => get(`/registrations/${id}`) });
-  const r = reg.data;
-  const profile = partnerProfile(r?.category);
+  const dispatch = useAppDispatch();
+  const entry = useAppSelector((st) => st.registrations.byId[Number(id)]);
+  const r = entry?.data;
 
+  useEffect(() => {
+    if (!entry || entry.status === "idle") dispatch(fetchRegistration(Number(id)));
+  }, [dispatch, id, entry]);
+
+  const p = r?.personal_information ?? {};
+  const b = r?.business_information ?? {};
   return (
     <View style={s.screen} testID="registration-detail-screen">
       <Header title="Registration Details" />
-      {reg.isLoading ? <Loading /> : reg.isError || !r ? <ErrorState message={(reg.error as Error)?.message ?? "Not found"} onRetry={reg.refetch} /> : (
+      {!r ? (
+        entry?.status === "failed" ? <ErrorState message={entry.error ?? "Not found"} onRetry={() => dispatch(fetchRegistration(Number(id)))} /> : <Loading />
+      ) : (
         <ScrollView contentContainerStyle={[s.content, { paddingBottom: 24 }]} showsVerticalScrollIndicator={false}>
           <Animated.View entering={FadeInUp.duration(400)} style={styles.headerCard}>
             <View style={[s.row, { gap: 14 }]}>
-              <Avatar name={`${r.first_name} ${r.last_name}`} size={60} tone="gold" />
+              <Avatar name={p.full_name} size={60} tone="gold" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.name} testID="registration-name">{r.first_name} {r.last_name}</Text>
-                <Text style={styles.sub}>{r.category} · {r.company || "Independent"}</Text>
+                <Text style={styles.name} testID="registration-name">{p.full_name}</Text>
+                <Text style={styles.sub}>{r.header.category}{val(b.company_name) ? ` · ${b.company_name}` : ""}</Text>
                 <View style={[s.row, { gap: 6, marginTop: 8 }]}>
-                  <Badge label={r.status} small />
-                  <Badge label={r.project} tone="gold" small />
+                  <Badge label={label({}, r.header.status.toLowerCase())} small />
                 </View>
               </View>
             </View>
             <View style={styles.headerMeta}>
-              <View><Text style={styles.metaLabel}>REGISTRATION NO.</Text><Text style={styles.metaValue}>{r.registration_no}</Text></View>
-              <View style={{ alignItems: "flex-end" }}><Text style={styles.metaLabel}>REGISTERED ON</Text><Text style={styles.metaValue}>{fmtDate(r.created_at)}</Text></View>
+              <View><Text style={styles.metaLabel}>REGISTRATION ID</Text><Text style={styles.metaValue}>CG-REG-{String(id).padStart(4, "0")}</Text></View>
+              <View style={{ alignItems: "flex-end" }}><Text style={styles.metaLabel}>SUBMITTED ON</Text><Text style={styles.metaValue}>{r.header.submitted_on}</Text></View>
             </View>
           </Animated.View>
 
-          <Animated.View entering={FadeInUp.delay(100).duration(400)}>
-            <SectionLabel style={{ marginTop: spacing.xl }}>Contact & Address</SectionLabel>
-            <Card>
-              <InfoRow icon="call-outline" label="Phone" value={r.mobile} />
-              <InfoRow icon="mail-outline" label="Email" value={r.email} />
-              <InfoRow icon="location-outline" label="Address" value={[r.address, r.city, r.state, r.pincode].filter(Boolean).join(", ")} />
-            </Card>
-          </Animated.View>
+          <SectionLabel style={{ marginTop: spacing.xl }}>Contact & Address</SectionLabel>
+          <Card>
+            <InfoRow icon="call-outline" label="Mobile" value={val(p.mobile_number)} />
+            <InfoRow icon="mail-outline" label="Email" value={val(p.email_address)} />
+            <InfoRow icon="location-outline" label="Address" value={[val(p.address), val(p.city), val(p.state)].filter(Boolean).join(", ")} />
+          </Card>
 
-          <Animated.View entering={FadeInUp.delay(180).duration(400)}>
-            <SectionLabel style={{ marginTop: spacing.xl }}>Professional Details</SectionLabel>
-            <Card>
-              <InfoRow icon="pricetag-outline" label="Category" value={r.category} />
-              {profile.entityLabel ? <InfoRow icon="business-outline" label="Company / Firm" value={r.company} /> : null}
-              {r.notes ? <InfoRow icon="chatbox-ellipses-outline" label="Notes" value={r.notes} /> : null}
-            </Card>
-            <SectionLabel style={{ marginTop: spacing.xl }}>Documents</SectionLabel>
-            <Card>
-              {(r.documents ?? []).length ? (
-                (r.documents ?? []).map((d: any) => (
-                  <View key={d.type} style={[s.between, { paddingVertical: 8 }]} testID={`registration-doc-${d.type.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
-                    <Text style={[s.body, { fontSize: 14, flex: 1 }]}>{d.type}</Text>
-                    <Badge label={d.status} tone={d.status === "Verified" ? "success" : "warning"} small />
-                  </View>
-                ))
-              ) : (
-                <Text style={s.bodyMuted}>No documents uploaded.</Text>
-              )}
-            </Card>
-          </Animated.View>
-
-          {profile.social ? (
-          <Animated.View entering={FadeInUp.delay(260).duration(400)}>
-            <SectionLabel style={{ marginTop: spacing.xl }}>Social Media</SectionLabel>
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              {SOCIAL.map((so) => {
-                const url = r.social?.[so.key];
-                return (
-                  <Pressable key={so.key} disabled={!url} onPress={() => url && Linking.openURL(url)} style={({ pressed }) => [styles.social, !url && { opacity: 0.45 }, pressed && { transform: [{ scale: 0.97 }] }]} testID={`social-${so.key}`}>
-                    <View style={styles.socialIcon}><Ionicons name={so.icon} size={20} color={colors.onImage} /></View>
-                    <Text style={styles.socialLabel}>{so.label}</Text>
-                    <Text style={s.caption}>{url ? "Open profile" : "Not linked"}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Animated.View>
+          {Object.values(b).some(val) ? (
+            <>
+              <SectionLabel style={{ marginTop: spacing.xl }}>Business Information</SectionLabel>
+              <Card>
+                <InfoRow icon="business-outline" label="Company / Firm" value={val(b.company_name)} />
+                <InfoRow icon="git-network-outline" label="Business type" value={val(b.business_type)} />
+                {val(b.gst_number) ? <InfoRow icon="receipt-outline" label="GST number" value={b.gst_number} /> : null}
+                {val(b.pan_number) ? <InfoRow icon="card-outline" label="PAN" value={b.pan_number} /> : null}
+                {val(b.msme_number) ? <InfoRow icon="ribbon-outline" label="MSME / Udyam" value={b.msme_number} /> : null}
+              </Card>
+            </>
           ) : null}
 
-          <Button label="Project overview" variant="secondary" icon="home-outline" onPress={() => router.push("/project")} style={{ marginTop: spacing.xl }} testID="registration-project-button" />
+          <SectionLabel style={{ marginTop: spacing.xl }}>Documents</SectionLabel>
+          <Card>
+            {(r.documents_submitted ?? []).length ? (
+              (r.documents_submitted ?? []).map((d) => (
+                <Pressable key={d.id} onPress={() => Linking.openURL(d.file_url)} style={[s.between, { paddingVertical: 8, gap: 10 }]} testID={`registration-doc-${d.id}`}>
+                  <Ionicons name="document-text-outline" size={18} color={colors.brandPrimary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.body, { fontSize: 14 }]}>{d.name}</Text>
+                    <Text style={s.caption} numberOfLines={1}>{d.original_name}</Text>
+                  </View>
+                  <Badge label={d.status} tone={/verified|approved/i.test(d.status) ? "success" : "warning"} small />
+                </Pressable>
+              ))
+            ) : (
+              <Text style={s.bodyMuted}>No documents uploaded.</Text>
+            )}
+          </Card>
         </ScrollView>
       )}
       <BottomNav />
@@ -114,7 +103,4 @@ const useStyles = makeStyles((colors) => ({
   headerMeta: { flexDirection: "row", justifyContent: "space-between", marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.15)" },
   metaLabel: { fontFamily: fonts.semibold, fontSize: 9, letterSpacing: 1.4, color: colors.brandSecondary },
   metaValue: { fontFamily: fonts.medium, fontSize: 14, color: colors.onImage, marginTop: 2 },
-  social: { flex: 1, alignItems: "center", gap: 6, paddingVertical: 14, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, shadowColor: colors.forestDeep, shadowOpacity: 0.05, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 1 },
-  socialIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.brandPrimary, alignItems: "center", justifyContent: "center" },
-  socialLabel: { fontFamily: fonts.semibold, fontSize: 12, color: colors.onSurface },
 }));

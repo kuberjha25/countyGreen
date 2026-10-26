@@ -375,7 +375,6 @@ const STATUS_TONE: Record<string, "success" | "warning" | "error" | "info" | "go
   Pending: "warning",
   Completed: "success",
   Available: "success",
-  Booked: "warning",
   Reserved: "gold",
   Sold: "muted",
   Hot: "error",
@@ -386,6 +385,19 @@ const STATUS_TONE: Record<string, "success" | "warning" | "error" | "info" | "go
   Required: "error",
   Optional: "muted",
   "Current Visit": "gold",
+  New: "info",
+  Contacted: "brand",
+  "Follow-up": "warning",
+  "Visit Scheduled": "gold",
+  "Visit Completed": "success",
+  Negotiation: "warning",
+  Booked: "success",
+  Expired: "muted",
+  Scheduled: "gold",
+  "Coming soon": "muted",
+  hot: "error",
+  warm: "warning",
+  cold: "info",
   Cancelled: "muted",
   "Not Available": "error",
   Closed: "muted",
@@ -686,6 +698,24 @@ export function Checkbox({ checked, label, onPress, testID }: { checked: boolean
       <Ionicons name={checked ? "checkbox" : "square-outline"} size={22} color={checked ? colors.brandPrimary : colors.muted} />
       {label ? <Text style={styles.optionText}>{label}</Text> : null}
     </Pressable>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Features waiting for a backend API                                  */
+/* ------------------------------------------------------------------ */
+export const COMING_SOON = "Coming soon — this feature will be available once the County Green server supports it.";
+
+export function ComingSoon({ title, body, testID = "coming-soon-screen" }: { title: string; body?: string; testID?: string }) {
+  const s = useScreenStyles();
+  return (
+    <View style={s.screen} testID={testID}>
+      <Header title={title} />
+      <View style={{ flex: 1, justifyContent: "center" }}>
+        <EmptyState icon="time-outline" title="Coming soon" body={body ?? `${title} will be available once the County Green server supports it.`} />
+      </View>
+      <BottomNav />
+    </View>
   );
 }
 

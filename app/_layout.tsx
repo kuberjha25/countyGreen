@@ -1,4 +1,3 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -8,10 +7,11 @@ import { LogBox, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaInsetsContext, SafeAreaProvider } from "react-native-safe-area-context";
+import { Provider } from "react-redux";
 
-import { AuthProvider } from "@/src/auth";
 import { ErrorBoundary } from "@/src/components/error-boundary";
-import { queryClient } from "@/src/query-client";
+import { store, useAppDispatch } from "@/src/store";
+import { restoreSession } from "@/src/store/authSlice";
 import { ToastProvider } from "@/src/toast";
 
 // Disable logbox errors etc so that users can see the app
@@ -25,6 +25,15 @@ const FRAME_INSETS =
   Platform.OS === "web" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("frame") === "1"
     ? { top: 54, bottom: 34, left: 0, right: 0 }
     : null;
+
+// Restores the saved token and loads the profile once on launch.
+function SessionBootstrap({ children }: { children: React.ReactNode }) {
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    dispatch(restoreSession());
+  }, [dispatch]);
+  return <>{children}</>;
+}
 
 function FrameInsets({ children }: { children: React.ReactNode }) {
   if (!FRAME_INSETS) return <>{children}</>;
@@ -55,8 +64,8 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <FrameInsets>
           <KeyboardProvider>
-            <QueryClientProvider client={queryClient}>
-              <AuthProvider>
+            <Provider store={store}>
+              <SessionBootstrap>
                 <ToastProvider>
                   <StatusBar style="dark" />
                   <Stack screenOptions={{ headerShown: false, animation: "slide_from_right" }}>
@@ -65,8 +74,8 @@ export default function RootLayout() {
                     <Stack.Screen name="(tabs)" options={{ animation: "fade" }} />
                   </Stack>
                 </ToastProvider>
-              </AuthProvider>
-            </QueryClientProvider>
+              </SessionBootstrap>
+            </Provider>
           </KeyboardProvider>
           </FrameInsets>
         </SafeAreaProvider>

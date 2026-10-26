@@ -1,22 +1,27 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useQuery } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View, useWindowDimensions } from "react-native";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { get } from "@/src/api";
-import { ADMIN_ROLE_ID, isStaff } from "@/src/access";
-import { useAuth, useCan } from "@/src/auth";
-import { BRAND, img, LEAF } from "@/src/brand";
+import { isStaff, isSuperAdmin } from "@/src/access";
+import { useAuth } from "@/src/auth";
+import { imageSource, LEAF, partnerTypeName } from "@/src/brand";
 import { Avatar, Badge, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
+import { useProjects } from "@/src/lookups";
+import { useAppDispatch, useAppSelector } from "@/src/store";
+import { fetchProfile } from "@/src/store/authSlice";
+import { fetchProjects } from "@/src/store/catalogSlice";
+import { fetchNews, fetchNotifications } from "@/src/store/contentSlice";
+import { fetchCounts } from "@/src/store/dashboardSlice";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
+import { label, NEWS_CATEGORIES } from "@/src/types";
 
-type Tile = { title: string; icon: string; value?: number; sub: string; pathname: string; params?: Record<string, string>; featured?: boolean; show?: boolean };
+type Tile = { title: string; icon: string; value?: number; sub: string; pathname: string; params?: Record<string, string>; featured?: boolean; counted?: boolean };
 
 // Screen 8 · Dashboard — every tile opens the matching detailed list (e.g. Converted Leads → converted lead listing).
 export default function Home() {
@@ -25,74 +30,88 @@ export default function Home() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const { user } = useAuth();
-  const can = useCan();
   const staff = isStaff(user);
   const { width } = useWindowDimensions();
   const [slide, setSlide] = useState(0);
   const cardW = width - spacing.lg * 2;
 
-  const dash = useQuery({ queryKey: ["dashboard"], queryFn: () => get("/dashboard") });
-  const d = dash.data;
-  const project = d?.featured?.[0];
-  const slides = project ? [{ image: project.hero_image, title: `${project.name} · ${project.status}`, sub: project.tagline }, ...(project.gallery ?? []).slice(0, 2).map((g: string, i: number) => ({ image: g, title: project.highlights?.[i + 1] ?? project.positioning, sub: project.location }))] : [{ image: "hero-security", title: `${BRAND.name} · ${BRAND.status}`, sub: BRAND.tagline }];
+  const projects = useProjects();
+  const dash = useAppSelector((st) => st.dashboard);
+  const news = useAppSelector((st) => st.content.news);
+  const unread = useAppSelector((st) => (st.content.notifications.data ?? []).filter((n) => !n.is_read).length);
+  const c = dash.counts;
 
-  const LEADS = "/(tabs)/leads", VISITS = "/(tabs)/visits";
-  const tiles: Tile[] = (staff
+  const load = useCallback(() => {
+    dispatch(fetchCounts(staff));
+    dispatch(fetchNews({ params: {} }));
+    dispatch(fetchNotifications());
+  }, [dispatch, staff]);
+  useEffect(load, [load]);
+  const refresh = () => {
+    load();
+    dispatch(fetchProfile());
+    dispatch(fetchProjects());
+  };
+
+  const list = projects.data ?? [];
+  const slides = list.map((p) => ({ image: imageSource(p.image_url), city: p.city ?? "", title: p.name, sub: p.short_description || [p.city, p.state].filter(Boolean).join(", "), id: p.id }));
+
+  const LEADS = "/(tabs)/leads";
+  const VISITS = "/(tabs)/visits";
+  const tiles: Tile[] = staff
     ? [
-        { title: "Total Leads", icon: "people-outline", value: d?.leads, sub: "All leads", pathname: LEADS, params: { status: "All" }, featured: true },
-        { title: "Pending Visits", icon: "calendar-outline", value: d?.visits_upcoming, sub: d ? `of ${d.visits} project visits` : "", pathname: VISITS, params: { status: "In Progress" }, featured: true },
-        { title: "In Progress", icon: "hourglass-outline", value: d?.leads_in_progress, sub: "Leads being followed up", pathname: LEADS, params: { status: "In Progress" } },
-        { title: "Converted Leads", icon: "trophy-outline", value: d?.leads_converted, sub: "Converted lead listing", pathname: LEADS, params: { status: "Converted" } },
-        { title: "Not Matured", icon: "close-circle-outline", value: d?.leads_not_matured, sub: "Closed without sale", pathname: LEADS, params: { status: "Not Matured" } },
-        { title: "Attended Visits", icon: "checkmark-done-outline", value: d?.visits_attended, sub: "Completed site visits", pathname: VISITS, params: { status: "Attended" } },
-        { title: "Availability", icon: "map-outline", value: d?.availability, sub: "Availability requests", pathname: "/availability", show: can("availability", "view") },
-        { title: "Registrations", icon: "person-add-outline", value: d?.registrations_pending, sub: d ? `pending of ${d.registrations}` : "", pathname: "/registrations", params: { status: "Pending" }, show: can("registrations", "view") },
-        { title: "Documents", icon: "document-text-outline", value: d?.documents, sub: "Brochures, plans & legal", pathname: "/documents" },
-        { title: "MIS", icon: "stats-chart-outline", sub: "Reports", pathname: "/mis", show: can("mis", "view") },
-        { title: "Projects", icon: "business-outline", value: d?.projects, sub: BRAND.location, pathname: "/project" },
+        { title: "Total Leads", icon: "people-outline", value: c?.leads, sub: "All leads", pathname: LEADS, params: { status: "all" }, featured: true, counted: true },
+        { title: "Pending Visits", icon: "calendar-outline", value: c?.visitsScheduled, sub: c ? `of ${c.visits} project visits` : "", pathname: VISITS, params: { status: "scheduled" }, featured: true, counted: true },
+        { title: "New Leads", icon: "sparkles-outline", value: c?.leadsNew, sub: "Not contacted yet", pathname: LEADS, params: { status: "new" }, counted: true },
+        { title: "Converted Leads", icon: "trophy-outline", value: c?.leadsConverted, sub: "Converted lead listing", pathname: LEADS, params: { status: "converted" }, counted: true },
+        { title: "Completed Visits", icon: "checkmark-done-outline", value: c?.visitsCompleted, sub: "Attended site visits", pathname: VISITS, params: { status: "completed" }, counted: true },
+        { title: "Registrations", icon: "person-add-outline", value: c?.registrationsPending, sub: "Pending approval", pathname: "/registrations", params: { status: "pending" }, counted: true },
+        { title: "Documents", icon: "document-text-outline", sub: "Brochures, plans & legal", pathname: "/documents" },
+        { title: "Projects", icon: "business-outline", value: list.length || undefined, sub: "Project details", pathname: "/project", counted: true },
       ]
     : [
-        { title: "My Leads", icon: "people-outline", value: d?.leads, sub: d ? `${d.leads_in_progress} in progress` : "", pathname: LEADS, params: { status: "All" }, featured: true },
-        { title: "Project Visits", icon: "calendar-outline", value: d?.visits, sub: d ? `${d.visits_upcoming} upcoming` : "", pathname: VISITS, params: { status: "All" }, featured: true },
-        { title: "Converted Leads", icon: "trophy-outline", value: d?.leads_converted, sub: "Converted lead listing", pathname: LEADS, params: { status: "Converted" } },
-        { title: "Our Products", icon: "map-outline", value: d?.products, sub: "Request for availability", pathname: "/(tabs)/products" },
-        { title: "Documents", icon: "document-text-outline", value: d?.documents, sub: "Brochures, plans & legal", pathname: "/documents" },
-        { title: "MIS", icon: "stats-chart-outline", sub: "Performance report", pathname: "/mis", show: can("mis", "view") },
-      ]
-  ).filter((t) => t.show !== false);
+        { title: "My Leads", icon: "people-outline", value: c?.leads, sub: c ? `${c.leadsNew} new` : "", pathname: LEADS, params: { status: "all" }, featured: true, counted: true },
+        { title: "Project Visits", icon: "calendar-outline", value: c?.visits, sub: c ? `${c.visitsScheduled} scheduled` : "", pathname: VISITS, params: { status: "all" }, featured: true, counted: true },
+        { title: "Converted Leads", icon: "trophy-outline", value: c?.leadsConverted, sub: "Converted lead listing", pathname: LEADS, params: { status: "converted" }, counted: true },
+        { title: "Our Products", icon: "map-outline", sub: "Request for availability", pathname: "/(tabs)/products" },
+        { title: "Documents", icon: "document-text-outline", sub: "Brochures, plans & legal", pathname: "/documents" },
+        { title: "Projects", icon: "business-outline", value: list.length || undefined, sub: "Project details", pathname: "/project", counted: true },
+      ];
+  const role = staff ? user?.role?.name ?? "Staff" : partnerTypeName(user?.partner_profile?.partner_type);
 
   return (
     <View style={s.screen} testID="home-screen">
       <View style={[styles.top, { paddingTop: insets.top + 8 }]}>
         <Pressable onPress={() => router.push("/(tabs)/profile")} style={[s.row, { gap: 10 }]} testID="home-avatar-button">
-          <Avatar name={`${user?.first_name ?? "C"} ${user?.last_name ?? "G"}`} size={40} />
+          <Avatar name={user?.name ?? "County Green"} size={40} />
           <View>
-            <Text style={styles.partnerLabel}>{(staff ? user?.role_name ?? "Staff" : user?.partner_type ?? "Channel Partner").toUpperCase()}</Text>
-            <Text style={styles.partnerName} numberOfLines={1}>{`${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim() || "Partner"}</Text>
+            <Text style={styles.partnerLabel}>{String(role).toUpperCase()}</Text>
+            <Text style={styles.partnerName} numberOfLines={1}>{user?.name || "Partner"}</Text>
           </View>
         </Pressable>
         <Image source={LEAF} style={{ width: 26, height: 26 }} contentFit="contain" />
         <Pressable onPress={() => router.push("/notifications")} style={styles.bell} testID="home-notifications-button">
           <Ionicons name="notifications-outline" size={22} color={colors.onSurface} />
-          {d?.unread_notifications ? (
+          {unread ? (
             <View style={styles.dot}>
-              <Text style={styles.dotText}>{d.unread_notifications}</Text>
+              <Text style={styles.dotText}>{unread}</Text>
             </View>
           ) : null}
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={dash.isRefetching} onRefresh={dash.refetch} tintColor={colors.brandPrimary} />}>
-        <Animated.View entering={FadeInDown.duration(500)}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={dash.status === "loading" && !!c} onRefresh={refresh} tintColor={colors.brandPrimary} />}>
+        {slides.length ? <Animated.View entering={FadeInDown.duration(500)}>
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} onMomentumScrollEnd={(e) => setSlide(Math.round(e.nativeEvent.contentOffset.x / width))} testID="hero-carousel">
-            {slides.map((sl: any, i: number) => (
-              <Pressable key={i} onPress={() => router.push("/project")} style={{ width, paddingHorizontal: spacing.lg }} testID={`hero-slide-${i}`}>
+            {slides.map((sl, i) => (
+              <Pressable key={i} onPress={() => router.push({ pathname: "/project", params: { id: String(sl.id) } })} style={{ width, paddingHorizontal: spacing.lg }} testID={`hero-slide-${i}`}>
                 <View style={[styles.hero, { width: cardW }]}>
-                  <Image source={img(sl.image)} style={styles.fill} contentFit="cover" transition={300} />
+                  <Image source={sl.image} style={styles.fill} contentFit="cover" transition={300} />
                   <LinearGradient colors={[colors.scrimStart, colors.scrimEnd]} style={styles.fill} />
                   <View style={styles.heroText}>
-                    <Badge label={BRAND.location.toUpperCase()} tone="gold" small />
+                    {sl.city ? <Badge label={sl.city.toUpperCase()} tone="gold" small /> : null}
                     <Text style={styles.heroTitle} numberOfLines={2}>{sl.title}</Text>
                     <Text style={styles.heroSub} numberOfLines={1}>{sl.sub}</Text>
                   </View>
@@ -101,15 +120,16 @@ export default function Home() {
             ))}
           </ScrollView>
           <View style={styles.dots}>
-            {slides.map((_: any, i: number) => <View key={i} style={[styles.dotIndicator, i === slide && styles.dotActive]} />)}
+            {slides.map((_, i) => <View key={i} style={[styles.dotIndicator, i === slide && styles.dotActive]} />)}
           </View>
-        </Animated.View>
+        </Animated.View> : null}
 
         <View style={s.content}>
           <View style={[s.between, { marginBottom: spacing.md }]}>
-            <Text style={styles.sectionTitle}>{user?.role_id === ADMIN_ROLE_ID ? "Admin Dashboard" : "Dashboard"}</Text>
+            <Text style={styles.sectionTitle}>{isSuperAdmin(user) ? "Admin Dashboard" : "Dashboard"}</Text>
             <Text style={s.caption}>{fmtDate(new Date().toISOString())}</Text>
           </View>
+          {dash.status === "failed" ? <Text style={[s.caption, { color: colors.error, marginBottom: spacing.sm }]}>{dash.error}</Text> : null}
 
           <View style={styles.grid}>
             {tiles.map((w, i) => {
@@ -124,8 +144,8 @@ export default function Home() {
                       <Ionicons name="arrow-forward" size={15} color={dark ? colors.onImageMuted : colors.muted} />
                     </View>
                     <View style={{ marginTop: spacing.md }}>
-                      {w.pathname !== "/mis" ? (
-                        <Text style={[styles.widgetValue, dark && { color: colors.onImage }]}>{dash.isLoading || w.value === undefined ? "—" : w.value}</Text>
+                      {w.counted ? (
+                        <Text style={[styles.widgetValue, dark && { color: colors.onImage }]}>{w.value === undefined ? "—" : w.value}</Text>
                       ) : (
                         <Text style={[styles.widgetValue, dark && { color: colors.onImage }, { fontSize: 22, lineHeight: 34 }]}>View</Text>
                       )}
@@ -138,32 +158,23 @@ export default function Home() {
             })}
           </View>
 
-          {staff || !can("registrations", "view") ? null : <Pressable onPress={() => router.push("/registrations")} style={({ pressed }) => [styles.regBanner, pressed && { opacity: 0.92 }]} testID="home-registrations-banner">
-            <View style={[styles.widgetIcon, { backgroundColor: colors.goldSoft }]}>
-              <Ionicons name="person-add-outline" size={19} color={colors.warning} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={s.name}>Registrations</Text>
-              <Text style={s.meta}>{d ? `${d.registrations} registered channel partners, brokers & influencers` : "Register channel partners, brokers & influencers"}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-          </Pressable>}
-
           <View style={[s.between, { marginTop: spacing.xl, marginBottom: spacing.md }]}>
             <Text style={styles.sectionTitle}>Latest Updates</Text>
             <Pressable onPress={() => router.push("/news")} testID="home-news-all"><Text style={s.link}>View all</Text></Pressable>
           </View>
           <View style={{ gap: 12 }}>
-            {(d?.news ?? []).map((n: any) => (
+            {news.items.slice(0, 3).map((n) => (
               <Pressable key={n.id} onPress={() => router.push(`/news/${n.id}`)} style={({ pressed }) => [styles.newsRow, pressed && { opacity: 0.92 }]} testID={`home-news-${n.id}`}>
-                <Image source={img(n.image)} style={styles.newsImg} contentFit="cover" />
+                <Image source={imageSource(n.image_url)} style={styles.newsImg} contentFit="cover" />
                 <View style={{ flex: 1 }}>
-                  <Badge label={n.category} small />
+                  <Badge label={label(NEWS_CATEGORIES, n.category)} small />
                   <Text style={[s.name, { marginTop: 6 }]} numberOfLines={2}>{n.title}</Text>
-                  <Text style={s.meta}>{fmtDate(n.published_at)}</Text>
+                  <Text style={s.meta}>{fmtDate(n.publish_date ?? undefined)}</Text>
                 </View>
               </Pressable>
             ))}
+            {news.status === "succeeded" && !news.items.length ? <Text style={s.bodyMuted}>No updates yet.</Text> : null}
+            {news.status === "failed" ? <Text style={s.bodyMuted}>{news.error}</Text> : null}
           </View>
         </View>
       </ScrollView>
@@ -195,7 +206,6 @@ const useStyles = makeStyles((colors) => ({
   widgetValue: { fontFamily: fonts.display, fontSize: 34, lineHeight: 38, color: colors.onSurface },
   widgetTitle: { fontFamily: fonts.semibold, fontSize: 13, color: colors.onSurface, marginTop: 2 },
   widgetSub: { fontFamily: fonts.body, fontSize: 11, color: colors.muted, marginTop: 2 },
-  regBanner: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: spacing.md, padding: 14, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, shadowColor: colors.forestDeep, shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 2 },
   newsRow: { flexDirection: "row", gap: 12, backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: 10 },
-  newsImg: { width: 92, height: 92, borderRadius: radius.md },
+  newsImg: { width: 92, height: 92, borderRadius: radius.md, backgroundColor: colors.forestSoft },
 }));

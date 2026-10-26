@@ -74,3 +74,32 @@ export function daysUntil(d?: string): number | null {
   if (next.getTime() < today.getTime()) next = new Date(today.getFullYear() + 1, date.getMonth(), date.getDate());
   return Math.round((next.getTime() - today.getTime()) / 86400000);
 }
+
+// "2026-10-26" — the date format the API expects.
+export function isoDay(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+// Any date the app shows ("26 Oct 2026") or the API sends → "2026-10-26".
+export function toIsoDay(v?: string | null) {
+  if (!v) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
+  const d = parseDate(v);
+  return d ? isoDay(d) : "";
+}
+
+// Admin-entered rich text (HTML) → plain paragraphs for <Text>.
+export function plainText(html?: string | null) {
+  return (html ?? "")
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

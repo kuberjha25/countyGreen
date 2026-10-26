@@ -7,24 +7,24 @@ import Animated, { FadeIn, FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/auth";
+import { Button } from "@/src/components/ui";
+import { useAppDispatch } from "@/src/store";
+import { restoreSession } from "@/src/store/authSlice";
 import { BRAND, IMAGES, LOGO_WHITE } from "@/src/brand";
 import { fonts, makeStyles, useTheme } from "@/src/theme";
 
 // Screen 1 · Splash / Welcome
 export default function Splash() {
   const router = useRouter();
-  const { ready, token, user } = useAuth();
+  const { ready, token, user, sessionError } = useAuth();
+  const dispatch = useAppDispatch();
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    if (!ready) return;
-    const t = setTimeout(() => {
-      if (!token || !user) router.replace("/(auth)/login");
-      else if (!user.profile_completed) router.replace("/(auth)/profile-type");
-      else router.replace("/(tabs)/home");
-    }, 1600);
+    if (!ready || (token && !user)) return; // token but no profile yet: wait / offer retry
+    const t = setTimeout(() => router.replace(token && user ? "/(tabs)/home" : "/(auth)/login"), 1600);
     return () => clearTimeout(t);
   }, [ready, token, user, router]);
 
@@ -37,7 +37,13 @@ export default function Splash() {
       </Animated.View>
       <Animated.View entering={FadeInUp.delay(500).duration(700)} style={[styles.bottom, { paddingBottom: insets.bottom + 32 }]}>
         <Text style={styles.tagline}>{BRAND.tagline}</Text>
-        <Text style={styles.meta}>{BRAND.status.toUpperCase()} · {BRAND.location.toUpperCase()}</Text>
+        <Text style={styles.meta}>{BRAND.location.toUpperCase()}</Text>
+        {ready && token && !user && sessionError ? (
+          <View style={{ marginTop: 20, alignItems: "center", gap: 10 }}>
+            <Text style={styles.meta}>{sessionError}</Text>
+            <Button label="Retry" small variant="gold" onPress={() => dispatch(restoreSession())} testID="splash-retry" />
+          </View>
+        ) : null}
       </Animated.View>
     </View>
   );

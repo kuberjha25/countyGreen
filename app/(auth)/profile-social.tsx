@@ -1,46 +1,37 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { get, put, User } from "@/src/api";
-import { useAuth } from "@/src/auth";
-import { Button, Header, ScreenTitle, SectionLabel, Select, StepIndicator, useScreenStyles } from "@/src/components/ui";
+import { partnerTypeName } from "@/src/brand";
+import { ReferenceChooser } from "@/src/components/partners";
+import { Button, Header, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
+import { useAppDispatch, useAppSelector } from "@/src/store";
+import { updateDraft } from "@/src/store/authSlice";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
-import { useToast } from "@/src/toast";
+import type { Reference } from "@/src/types";
 
-// Screen 6 · Complete Profile · Step 3 (Associated County Green employee).
-// Social media profiles are asked only of influencers, in step 2.
+// Screen 6 · Partner registration · Step 3 (associated County Green employee).
+// The API takes knows_employee as "yes" / "no" and employee_id from the staff list.
 export default function ProfileSocial() {
   const s = useScreenStyles();
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const toast = useToast();
-  const { user, setUser } = useAuth();
-  const [knows, setKnows] = useState<boolean>(user?.knows_employee ?? false);
-  const [employee, setEmployee] = useState(user?.associated_employee ?? "");
+  const dispatch = useAppDispatch();
+  const draft = useAppSelector((st) => st.auth.draft);
+  const [knows, setKnows] = useState<boolean>(draft.knows_employee === "yes");
+  const [employee, setEmployee] = useState<Reference | null>(draft.employee_id ? { id: Number(draft.employee_id), name: draft.employee_name ?? "", mobile: "" } : null);
   const [err, setErr] = useState<string | undefined>();
-
-  const employees = useQuery({ queryKey: ["employees"], queryFn: () => get<{ name: string }[]>("/employees") });
-
-  const save = useMutation({
-    mutationFn: () => put<User>("/me", { knows_employee: knows, associated_employee: knows ? employee : "", profile_step: Math.max(user?.profile_step ?? 0, 3) }),
-    onSuccess: (u) => {
-      setUser(u);
-      router.push("/(auth)/profile-company");
-    },
-    onError: (e: Error) => toast.show(e.message, "error"),
-  });
 
   const submit = () => {
     if (knows && !employee) return setErr("Please select the associated employee");
     setErr(undefined);
-    save.mutate();
+    dispatch(updateDraft({ knows_employee: knows ? "yes" : "no", employee_id: knows && employee ? String(employee.id) : "", employee_name: knows && employee ? employee.name : "" }));
+    router.push("/(auth)/profile-company");
   };
 
   return (
@@ -48,7 +39,7 @@ export default function ProfileSocial() {
       <Header showBell={false} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled">
         <StepIndicator step={3} total={4} />
-        <ScreenTitle eyebrow={(user?.partner_type ?? "Channel Partner").toUpperCase()} title="Complete Profile" subtitle="Tell us if you already work with someone from the County Green team." />
+        <ScreenTitle eyebrow={partnerTypeName(draft.partner_type).toUpperCase()} title="Complete Profile" subtitle="Tell us if you already work with someone from the County Green team." />
 
         <SectionLabel>Do you know any County Green employee?</SectionLabel>
         <View style={{ flexDirection: "row", gap: 10, marginBottom: spacing.xl }}>
@@ -70,15 +61,14 @@ export default function ProfileSocial() {
 
         {knows ? (
           <>
-            <SectionLabel>Select Employee</SectionLabel>
-            <Select label="Associated employee" value={employee} options={(employees.data ?? []).map((e) => e.name)} onChange={setEmployee} placeholder={employees.isLoading ? "Loading…" : "Select employee"} error={err} testID="employee-select" />
+            <ReferenceChooser value={employee} onChange={setEmployee} userType="backoffice" label="Associated employee" error={err} testID="employee-select" />
           </>
         ) : null}
 
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: insets.bottom + 16 }}>
-          <Button label="Continue" icon="arrow-forward" onPress={submit} loading={save.isPending} testID="profile-step2-continue" />
+          <Button label="Continue" icon="arrow-forward" onPress={submit} testID="profile-step2-continue" />
         </View>
       </KeyboardStickyView>
     </View>

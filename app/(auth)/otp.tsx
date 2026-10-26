@@ -1,12 +1,12 @@
-import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { post, User } from "@/src/api";
-import { useAuth } from "@/src/auth";
+import { errorMessage } from "@/src/api";
+import { sendOtp, verifyOtp } from "@/src/store/authSlice";
+import { useRun } from "@/src/store/useRun";
 import { Button, Header, ScreenTitle } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
@@ -19,7 +19,6 @@ export default function VerifyOtp() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
-  const { signIn } = useAuth();
   const [otp, setOtp] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [seconds, setSeconds] = useState(29);
@@ -31,26 +30,34 @@ export default function VerifyOtp() {
     return () => clearTimeout(t);
   }, [seconds]);
 
-  const verify = useMutation({
-    mutationFn: () => post<{ access_token: string; user: User }>("/auth/verify-otp", { country_code: code, phone, otp }),
-    onSuccess: async (data) => {
-      await signIn(data.access_token, data.user);
-      toast.show("Number verified", "success");
-      router.replace(data.user.profile_completed ? "/(tabs)/home" : "/(auth)/profile-type");
+  const [runVerify, verifying] = useRun();
+  const [runResend, resending] = useRun();
+  // Existing user → signed in; new user → self-registration (profile steps).
+  const verify = {
+    isPending: verifying,
+    mutate: async () => {
+      try {
+        const r = await runVerify<{ isNewUser: boolean }>(verifyOtp({ mobile: phone, otp }));
+        toast.show("Number verified", "success");
+        router.replace(r.isNewUser ? "/(auth)/profile-type" : "/(tabs)/home");
+      } catch (e) {
+        setError(errorMessage(e));
+      }
     },
-    onError: (e: Error) => setError(e.message),
-  });
+  };
 
-  const resend = useMutation({
-    mutationFn: () => post("/auth/request-otp", { country_code: code, phone }),
-    onSuccess: () => {
-      setSeconds(29);
-      setOtp("");
-      setError(undefined);
-      toast.show("A new code has been sent", "success");
-    },
-    onError: (e: Error) => toast.show(e.message, "error"),
-  });
+  const resend = {
+    isPending: resending,
+    mutate: () =>
+      runResend(sendOtp(phone))
+        .then(() => {
+          setSeconds(29);
+          setOtp("");
+          setError(undefined);
+          toast.show("A new code has been sent", "success");
+        })
+        .catch((e) => toast.show(errorMessage(e), "error")),
+  };
 
   const submit = () => {
     if (otp.length !== 6) return setError("Enter the 6-digit code");
@@ -94,7 +101,7 @@ export default function VerifyOtp() {
             {error}
           </Text>
         ) : (
-          <Text style={styles.hint}>The code expires in 5 minutes. Demo code: 111111</Text>
+          <Text style={styles.hint}>The code expires in 5 minutes.</Text>
         )}
 
         <Pressable onPress={() => router.back()} style={styles.changeRow} testID="change-number-button">

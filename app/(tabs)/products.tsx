@@ -1,20 +1,20 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { get, post } from "@/src/api";
-import { useCan } from "@/src/auth";
-import { BRAND, IMAGES, img, Product } from "@/src/brand";
-import { Badge, Button, ConfirmSheet, EmptyState, ErrorState, Loading, useScreenStyles } from "@/src/components/ui";
+import { BRAND, IMAGES } from "@/src/brand";
+import { Badge, Button, COMING_SOON, EmptyState, ErrorState, Loading, useScreenStyles } from "@/src/components/ui";
+import { useAppDispatch, useAppSelector } from "@/src/store";
+import { fetchProducts } from "@/src/store/catalogSlice";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
-// Screen 20 · Our Products (replaces Inventory) + "Request for Availability" sheet
+// Screen 20 · Our Products (replaces Inventory) — the inventory categories configured on the
+// County Green server (e.g. 500 Sq. Yards), per project. "Request for Availability" has no API yet.
 export default function OurProducts() {
   const s = useScreenStyles();
   const styles = useStyles();
@@ -22,24 +22,12 @@ export default function OurProducts() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
-  const qc = useQueryClient();
-  const can = useCan();
-  const products = useQuery({ queryKey: ["products"], queryFn: () => get<Product[]>("/products") });
-  const requests = useQuery({ queryKey: ["availability"], queryFn: () => get<any[]>("/availability"), enabled: can("availability", "view") });
-  const [requesting, setRequesting] = useState<Product | null>(null);
+  const dispatch = useAppDispatch();
+  const products = useAppSelector((st) => st.catalog.products);
 
-  const request = useMutation({
-    mutationFn: () => post("/availability", { product_id: requesting?.id }),
-    onSuccess: (r: any) => {
-      qc.invalidateQueries({ queryKey: ["availability"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-      setRequesting(null);
-      toast.show(`Request sent — ${r.assigned_to} will confirm availability`, "success");
-    },
-    onError: (e: Error) => toast.show(e.message, "error"),
-  });
-
+  useEffect(() => {
+    if (products.status === "idle") dispatch(fetchProducts());
+  }, [dispatch, products.status]);
 
   return (
     <View style={s.screen} testID="products-screen">
@@ -48,7 +36,7 @@ export default function OurProducts() {
         <LinearGradient colors={[colors.scrimStart, colors.scrimEnd]} style={styles.fill} />
         <View style={[styles.heroContent, { paddingTop: insets.top + 12 }]}>
           <View style={s.between}>
-            <Badge label={BRAND.status.toUpperCase()} tone="gold" small />
+            <View />
             <Pressable onPress={() => router.push("/notifications")} hitSlop={8} testID="products-notifications-button"><Ionicons name="notifications-outline" size={22} color={colors.onImage} /></Pressable>
           </View>
           <View>
@@ -57,50 +45,28 @@ export default function OurProducts() {
           </View>
         </View>
       </View>
-      {products.isLoading ? <Loading /> : products.isError ? <ErrorState message={(products.error as Error).message} onRetry={products.refetch} /> : (
+      {products.status === "loading" && !products.data ? <Loading /> : products.status === "failed" && !products.data ? <ErrorState message={products.error ?? "Could not load products"} onRetry={() => dispatch(fetchProducts())} /> : (
         <FlatList
           data={products.data ?? []}
-          keyExtractor={(p) => p.id}
+          keyExtractor={(p) => `${p.project_id}-${p.id}`}
           contentContainerStyle={{ padding: spacing.lg, paddingBottom: 32, gap: 12 }}
-          refreshControl={<RefreshControl refreshing={products.isRefetching} onRefresh={() => { products.refetch(); requests.refetch(); }} tintColor={colors.brandPrimary} />}
-          ListHeaderComponent={
-            <View style={{ gap: 10 }}>
-              {can("availability", "view") ? (
-                <Pressable onPress={() => router.push("/availability")} style={styles.linkCard} testID="products-requests-link">
-                  <View style={styles.linkIcon}><Ionicons name="hourglass-outline" size={18} color={colors.warning} /></View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.name}>Availability requests</Text>
-                    <Text style={s.meta}>{requests.data ? `${requests.data.length} request${requests.data.length === 1 ? "" : "s"} with partner & assigned staff` : "With partner & assigned staff"}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-                </Pressable>
-              ) : null}
-              {can("products", "edit") ? <Button label="Manage products" icon="create-outline" variant="secondary" small onPress={() => router.push("/admin/products")} testID="products-manage-button" /> : null}
-            </View>
-          }
-          ListEmptyComponent={<EmptyState icon="map-outline" title="No products yet" body="Products added by Admin will appear here." />}
+          refreshControl={<RefreshControl refreshing={products.status === "loading"} onRefresh={() => dispatch(fetchProducts())} tintColor={colors.brandPrimary} />}
+          ListEmptyComponent={<EmptyState icon="map-outline" title="No products yet" body="Products added on the County Green server will appear here." />}
           renderItem={({ item: p }) => (
             <View style={styles.card} testID={`product-card-${p.id}`}>
-              <View style={styles.cardImgWrap}>
-                <Image source={img(p.image)} style={styles.fill} contentFit="cover" />
-                <LinearGradient colors={[colors.scrimStart, colors.scrimEnd]} style={styles.fill} />
-                <View style={styles.cardImgText}>
-                  <Badge label={p.category || "Product"} tone="gold" small />
-                  <Text style={styles.cardTitle}>{p.name}</Text>
+              <View style={[s.between, { alignItems: "flex-start" }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>{p.name}</Text>
+                  <Text style={s.meta}>{[p.project_name, p.display_area && parseFloat(p.display_area) > 0 ? p.display_area : null].filter(Boolean).join(" · ")}</Text>
                 </View>
+                {p.inventories_count !== undefined ? <Badge label={`${p.inventories_count} unit${p.inventories_count === 1 ? "" : "s"}`} tone="gold" small /> : null}
               </View>
-              <View style={{ padding: spacing.lg, gap: spacing.md }}>
-                {p.description ? <Text style={s.bodyMuted}>{p.description}</Text> : null}
-                {can("availability", "add") ? (
-                  <Button label="Request for availability" icon="send-outline" variant="gold" small onPress={() => setRequesting(p)} testID={`product-request-${p.id}`} />
-                ) : null}
-              </View>
+              {p.towers.length ? <Text style={[s.caption, { marginTop: 6 }]}>{p.towers.join(", ")}</Text> : null}
+              <Button label="Request for availability" icon="send-outline" variant="gold" small onPress={() => toast.show(COMING_SOON, "info")} style={{ marginTop: spacing.md }} testID={`product-request-${p.id}`} />
             </View>
           )}
         />
       )}
-
-      <ConfirmSheet visible={!!requesting} onClose={() => setRequesting(null)} title="Request for availability" body={`Send an availability request for ${requesting?.name ?? ""} to the County Green team?`} confirmLabel="Send request" onConfirm={() => request.mutate()} loading={request.isPending} testID="availability-request" />
     </View>
   );
 }
@@ -111,10 +77,6 @@ const useStyles = makeStyles((colors) => ({
   heroContent: { flex: 1, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, justifyContent: "space-between" },
   heroTitle: { fontFamily: fonts.display, fontSize: 32, color: colors.onImage },
   heroSub: { fontFamily: fonts.body, fontSize: 13, color: colors.onImageMuted, marginTop: 2 },
-  linkCard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: radius.lg, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border },
-  linkIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.goldSoft, alignItems: "center", justifyContent: "center" },
-  card: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: "hidden" },
-  cardImgWrap: { height: 150, backgroundColor: colors.forestDeep },
-  cardImgText: { flex: 1, justifyContent: "flex-end", padding: spacing.lg, gap: 6 },
-  cardTitle: { fontFamily: fonts.display, fontSize: 28, lineHeight: 32, color: colors.onImage },
+  card: { backgroundColor: colors.surfaceSecondary, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.lg },
+  title: { fontFamily: fonts.display, fontSize: 26, lineHeight: 30, color: colors.onSurface },
 }));

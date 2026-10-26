@@ -1,62 +1,47 @@
-import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { put, User } from "@/src/api";
-import { useAuth } from "@/src/auth";
-import { ENTITY_TYPES, PARTNER_TYPES, PartnerType, partnerProfile } from "@/src/brand";
-import { Button, ChoiceChips, Field, Header, ScreenTitle, SectionLabel, StepIndicator, OptionTile, useScreenStyles } from "@/src/components/ui";
+import { PARTNER_TYPES, PartnerType } from "@/src/brand";
+import { Button, ChoiceChips, Field, Header, OptionTile, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
+import { useAppDispatch, useAppSelector } from "@/src/store";
+import { updateDraft } from "@/src/store/authSlice";
 import { spacing } from "@/src/theme";
-import { useToast } from "@/src/toast";
+import { BUSINESS_TYPES } from "@/src/types";
 
-// Screen 4 · Complete Profile · Step 1 (Partner type & basic information)
+// Screen 4 · Partner registration · Step 1 (partner type & basic information).
+// Answers are kept in the Redux draft and submitted together at step 4.
 export default function ProfileType() {
   const s = useScreenStyles();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const toast = useToast();
-  const { user, setUser } = useAuth();
-  const [type, setType] = useState<PartnerType>((user?.partner_type as PartnerType) ?? "Channel Partner");
-  const [entity, setEntity] = useState(user?.entity_type ?? "");
-  const [first, setFirst] = useState(user?.first_name ?? "");
-  const [last, setLast] = useState(user?.last_name ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
+  const dispatch = useAppDispatch();
+  const draft = useAppSelector((st) => st.auth.draft);
+  const [type, setType] = useState<PartnerType>((PARTNER_TYPES.find((p) => p.api === draft.partner_type)?.key as PartnerType) ?? "Channel Partner");
+  const [business, setBusiness] = useState(draft.business_type ?? "");
+  const [first, setFirst] = useState(draft.first_name ?? "");
+  const [last, setLast] = useState(draft.last_name ?? "");
+  const [email, setEmail] = useState(draft.email ?? "");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const profile = partnerProfile(type);
-
-  const save = useMutation({
-    mutationFn: () =>
-      put<User>("/me", {
-        partner_type: type,
-        entity_type: profile.entityLabel ? entity : "Individual",
-        first_name: first.trim(),
-        last_name: last.trim(),
-        email: email.trim(),
-        profile_step: Math.max(user?.profile_step ?? 0, 1),
-      }),
-    onSuccess: (u) => {
-      setUser(u);
-      router.push("/(auth)/profile-addon");
-    },
-    onError: (e: Error) => toast.show(e.message, "error"),
-  });
+  const isCp = type === "Channel Partner";
 
   const submit = () => {
     const e: Record<string, string> = {};
     if (!first.trim()) e.first = "First name is required";
-    if (profile.entityLabel && !entity) e.entity = "Select the type of entity";
+    if (!last.trim()) e.last = "Last name is required";
+    if (isCp && !business) e.business = "Select the type of business";
     if (email && !/^\S+@\S+\.\S+$/.test(email)) e.email = "Enter a valid email";
     setErrors(e);
     if (Object.keys(e).length) return;
-    save.mutate();
+    dispatch(updateDraft({ partner_type: PARTNER_TYPES.find((p) => p.key === type)!.api, business_type: isCp ? business : "", first_name: first.trim(), last_name: last.trim(), email: email.trim() }));
+    router.push("/(auth)/profile-addon");
   };
 
   return (
     <View style={s.screen} testID="profile-type-screen">
-      <Header showBell={false} onBack={() => (user?.profile_completed && router.canGoBack() ? router.back() : router.replace("/(auth)/login"))} />
+      <Header showBell={false} onBack={() => router.replace("/(auth)/login")} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled">
         <StepIndicator step={1} total={4} />
         <ScreenTitle title="Complete Profile" subtitle="Please fill in your details to get started" />
@@ -68,20 +53,20 @@ export default function ProfileType() {
           ))}
         </View>
 
-        {profile.entityLabel ? <ChoiceChips label={profile.entityLabel} value={entity} options={ENTITY_TYPES} onChange={setEntity} error={errors.entity} testID="entity-type" /> : null}
+        {isCp ? <ChoiceChips label="Type of business" value={BUSINESS_TYPES[business]} options={Object.values(BUSINESS_TYPES)} onChange={(v) => setBusiness(Object.keys(BUSINESS_TYPES).find((k) => BUSINESS_TYPES[k] === v) ?? "")} error={errors.business} testID="business-type" /> : null}
 
         <SectionLabel>Basic Information</SectionLabel>
         <View style={{ flexDirection: "row", gap: 10 }}>
           <Field label="First name" placeholder="First Name" value={first} onChangeText={setFirst} error={errors.first} containerStyle={{ flex: 1 }} testID="first-name-input" />
-          <Field label="Last name" placeholder="Last Name" value={last} onChangeText={setLast} containerStyle={{ flex: 1 }} testID="last-name-input" />
+          <Field label="Last name" placeholder="Last Name" value={last} onChangeText={setLast} error={errors.last} containerStyle={{ flex: 1 }} testID="last-name-input" />
         </View>
         <Field label="Email address" placeholder="Email Address" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} rightIcon="mail-outline" error={errors.email} testID="email-input" />
-        <Field label="Mobile number" value={user?.phone ?? ""} editable={false} rightIcon="lock-closed-outline" testID="mobile-readonly" />
+        <Field label="Mobile number" value={draft.mobile ?? ""} editable={false} rightIcon="lock-closed-outline" testID="mobile-readonly" />
         <Text style={s.caption}>Your verified mobile number cannot be changed here.</Text>
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: insets.bottom + 16 }}>
-          <Button label="Continue" icon="arrow-forward" onPress={submit} loading={save.isPending} testID="profile-step1-continue" />
+          <Button label="Continue" icon="arrow-forward" onPress={submit} testID="profile-step1-continue" />
         </View>
       </KeyboardStickyView>
     </View>

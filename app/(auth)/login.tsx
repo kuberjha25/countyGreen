@@ -1,20 +1,21 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
-import { useMutation } from "@tanstack/react-query";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Text, View, useWindowDimensions } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { post } from "@/src/api";
+import { errorMessage } from "@/src/api";
 import { BRAND, IMAGES, LOGO_WHITE } from "@/src/brand";
 import { Button, Field, Select } from "@/src/components/ui";
-import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
+import { fonts, makeStyles, spacing, useTheme } from "@/src/theme";
+import { sendOtp } from "@/src/store/authSlice";
+import { useRun } from "@/src/store/useRun";
 import { useToast } from "@/src/toast";
 
-const CODES = ["+91", "+971", "+1", "+44", "+61", "+65"];
+const CODES = ["+91"]; // County Green logins are Indian 10-digit mobile numbers
 
 // Screen 2 · Welcome / Mobile Number
 export default function Login() {
@@ -30,14 +31,19 @@ export default function Login() {
   // Shorter hero on small phones so the form and Continue fit without scrolling.
   const heroHeight = Math.min(340, Math.max(240, Math.round(height * 0.36)));
 
-  const request = useMutation({
-    mutationFn: () => post("/auth/request-otp", { country_code: code, phone }),
-    onSuccess: () => {
-      toast.show("Verification code sent", "success");
-      router.push({ pathname: "/(auth)/otp", params: { code, phone } });
+  const [run, sending] = useRun();
+  const request = {
+    isPending: sending,
+    mutate: async () => {
+      try {
+        await run(sendOtp(phone));
+        toast.show("Verification code sent", "success");
+        router.push({ pathname: "/(auth)/otp", params: { code, phone } });
+      } catch (e) {
+        toast.show(errorMessage(e), "error");
+      }
     },
-    onError: (e: Error) => toast.show(e.message, "error"),
-  });
+  };
 
   const submit = () => {
     const digits = phone.replace(/\D/g, "");
@@ -91,13 +97,6 @@ export default function Login() {
             </Text>
             .
           </Text>
-          <View style={styles.socialRow}>
-            {(["logo-instagram", "logo-facebook", "logo-youtube"] as const).map((n) => (
-              <Pressable key={n} style={styles.social} testID={`social-${n}`}>
-                <Ionicons name={n} size={16} color={colors.muted} />
-              </Pressable>
-            ))}
-          </View>
         </View>
       </KeyboardAwareScrollView>
     </View>
@@ -120,6 +119,4 @@ const useStyles = makeStyles((colors) => ({
   hint: { fontFamily: fonts.body, fontSize: 12, color: colors.muted },
   terms: { fontFamily: fonts.body, fontSize: 12, lineHeight: 18, color: colors.muted, textAlign: "center", marginTop: 14 },
   termsLink: { color: colors.brandPrimary, fontFamily: fonts.semibold },
-  socialRow: { flexDirection: "row", justifyContent: "center", gap: 12, marginTop: 14 },
-  social: { width: 36, height: 36, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
 }));
