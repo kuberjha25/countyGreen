@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.countygreens.app"
+      "bundleIdentifier": "com.countygreens.app",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -39,7 +44,22 @@
       "expo-secure-store",
       "expo-web-browser",
       "expo-status-bar",
-      "@react-native-vector-icons/ionicons"
+      "@react-native-vector-icons/ionicons",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      "expo-notifications",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static",
+            "forceStaticLinking": [
+              "RNFBApp",
+              "RNFBMessaging"
+            ]
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -47,9 +67,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "50e495dd-f9b5-46a3-b337-a7c963324e08"
+        "projectId": "97b8558e-e788-40d0-99bb-fde354a0e2b6"
       }
     },
-    "owner": "kuberjha1998"
+    "owner": "kuberjha25"
   }
 }

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { errorMessage } from "@/src/api";
 import { sendOtp, verifyOtp } from "@/src/store/authSlice";
+import { useAppSelector } from "@/src/store";
 import { useRun } from "@/src/store/useRun";
 import { Button, Header, ScreenTitle } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -20,6 +21,8 @@ export default function VerifyOtp() {
   const router = useRouter();
   const toast = useToast();
   const [otp, setOtp] = useState("");
+  // OTP returned by send-otp — shown here while the SMS is not being delivered.
+  const sentOtp = useAppSelector((st) => st.auth.sentOtp);
   const [error, setError] = useState<string | undefined>();
   const [seconds, setSeconds] = useState(29);
   const inputRef = useRef<TextInput>(null);
@@ -70,6 +73,15 @@ export default function VerifyOtp() {
       <Header showBell={false} />
       <KeyboardAwareScrollView bottomOffset={120} contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
         <ScreenTitle eyebrow="VERIFICATION" title="Verify OTP" subtitle={`Enter the 6-digit code sent to ${code} ${phone}`} />
+        {sentOtp ? (
+          <View style={styles.otpBanner} testID="otp-from-server">
+            <View style={{ flex: 1 }}>
+              <Text style={styles.otpLabel}>YOUR OTP</Text>
+              <Text style={styles.otpValue} selectable>{sentOtp}</Text>
+            </View>
+            <Button label="Use code" small variant="gold" onPress={() => { setOtp(sentOtp.replace(/\D/g, "").slice(0, 6)); setError(undefined); }} testID="otp-use-code" />
+          </View>
+        ) : null}
 
         <Pressable onPress={() => inputRef.current?.focus()} style={styles.boxes} testID="otp-boxes">
           {Array.from({ length: 6 }).map((_, i) => {
@@ -132,6 +144,9 @@ export default function VerifyOtp() {
 
 const useStyles = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.surface },
+  otpBanner: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, marginBottom: spacing.lg, borderRadius: radius.md, backgroundColor: colors.goldSoft, borderWidth: 1, borderColor: colors.brandSecondary },
+  otpLabel: { fontFamily: fonts.semibold, fontSize: 10, letterSpacing: 1.4, color: colors.warning },
+  otpValue: { fontFamily: fonts.display, fontSize: 30, letterSpacing: 6, color: colors.onSurface },
   boxes: { flexDirection: "row", gap: 10, justifyContent: "space-between" },
   box: { flex: 1, height: 60, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSecondary, alignItems: "center", justifyContent: "center" },
   boxActive: { borderColor: colors.brandPrimary, borderWidth: 1.5 },

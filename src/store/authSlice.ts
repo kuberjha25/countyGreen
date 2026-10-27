@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { Platform } from "react-native";
 
 import { ApiError, getToken, request, setToken } from "@/src/api";
+import { getPushRegistration } from "@/src/push";
 import type { Envelope, ProfileStats, User } from "@/src/types";
 
 type Profile = { user: User; stats: ProfileStats | null };
@@ -16,12 +17,18 @@ type AuthState = {
   sessionError?: string; // profile could not be loaded (e.g. offline) — splash offers retry
   mobile: string; // verified mobile of a new user, for self-registration
   isNewUser: boolean;
+  sentOtp?: string; // OTP echoed by send-otp (shown on the OTP screen while SMS is not delivered)
   draft: RegistrationDraft;
   registrationMessage?: string; // server message after self-registration (e.g. pending approval)
 };
 
 const initialState: AuthState = { ready: false, token: null, user: null, stats: null, mobile: "", isNewUser: false, draft: {} };
 const deviceType = Platform.OS === "ios" ? "ios" : "android";
+// fcm_token + device_type for verify-otp / self-registration (best effort, never blocks login).
+const pushFields = async (): Promise<Record<string, string>> => {
+  const push = await getPushRegistration();
+  return { device_type: push.device_type ?? deviceType, ...(push.fcm_token ? { fcm_token: push.fcm_token } : {}) };
+};
 
 const loadProfile = async (): Promise<Profile> => {
   const r = await request<Envelope<{ user: User; stats?: ProfileStats }>>("/auth/profile");
@@ -42,10 +49,10 @@ export const restoreSession = createAsyncThunk("auth/restore", async () => {
   }
 });
 
-export const sendOtp = createAsyncThunk("auth/sendOtp", async (mobile: string) => request<{ message: string }>("/auth/send-otp", { method: "POST", body: { mobile }, auth: false }));
+export const sendOtp = createAsyncThunk("auth/sendOtp", async (mobile: string) => request<{ message: string; otp?: string | number }>("/auth/send-otp", { method: "POST", body: { mobile }, auth: false }));
 
 export const verifyOtp = createAsyncThunk("auth/verifyOtp", async ({ mobile, otp }: { mobile: string; otp: string }) => {
-  const r = await request<{ is_new_user: boolean; token: string | null; user: User | null }>("/auth/verify-otp", { method: "POST", body: { mobile, otp, device_type: deviceType }, auth: false });
+  const r = await request<{ is_new_user: boolean; token: string | null; user: User | null }>("/auth/verify-otp", { method: "POST", body: { mobile, otp, ...(await pushFields()) }, auth: false });
   if (r.is_new_user || !r.token) return { mobile, isNewUser: true as const, token: null, profile: null };
   await setToken(r.token);
   return { mobile, isNewUser: false as const, token: r.token, profile: await loadProfile() };
@@ -59,7 +66,11 @@ export const updateProfile = createAsyncThunk("auth/updateProfile", async (body:
 });
 
 // POST /api/registrations — JSON for broker / influencer / freelancer, multipart for channel partners (documents).
-export const selfRegister = createAsyncThunk("auth/selfRegister", async (payload: FormData | Record<string, string>) => {
+export const selfRegister = createAsyncThunk("auth/selfRegister", async (input: FormData | Record<string, string>) => {
+  const push = await pushFields();
+  let payload = input;
+  if (input instanceof FormData) Object.entries(push).forEach(([k, v]) => input.append(k, v));
+  else payload = { ...input, ...push };
   const r = await request<{ token?: string; message: string }>("/registrations", payload instanceof FormData ? { method: "POST", form: payload, auth: false } : { method: "POST", body: payload, auth: false });
   // The registration is saved once this POST succeeds. A new partner is "pending approval",
   // so the profile may not load yet — that must not turn a successful submit into an error.
@@ -89,6 +100,12 @@ const slice = createSlice({
     sessionExpired: (s) => ({ ...initialState, ready: s.ready }),
   },
   extraReducers: (b) => {
+    b.addCase(sendOtp.pending, (s) => {
+      s.sentOtp = undefined;
+    })
+      .addCase(sendOtp.fulfilled, (s, a) => {
+        s.sentOtp = a.payload.otp !== undefined && a.payload.otp !== null ? String(a.payload.otp) : undefined;
+      });
     b.addCase(restoreSession.pending, (s) => {
       s.ready = false;
       s.sessionError = undefined;
@@ -105,6 +122,7 @@ const slice = createSlice({
         s.sessionError = a.error.message;
       })
       .addCase(verifyOtp.fulfilled, (s, a) => {
+        s.sentOtp = undefined;
         s.mobile = a.payload.mobile;
         s.isNewUser = a.payload.isNewUser;
         s.draft = a.payload.isNewUser ? { mobile: a.payload.mobile } : {};

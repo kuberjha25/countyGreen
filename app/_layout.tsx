@@ -10,8 +10,10 @@ import { SafeAreaInsetsContext, SafeAreaProvider } from "react-native-safe-area-
 import { Provider } from "react-redux";
 
 import { ErrorBoundary } from "@/src/components/error-boundary";
-import { store, useAppDispatch } from "@/src/store";
+import { syncDeviceToken } from "@/src/push";
+import { store, useAppDispatch, useAppSelector } from "@/src/store";
 import { restoreSession } from "@/src/store/authSlice";
+import { fetchNotifications } from "@/src/store/contentSlice";
 import { ToastProvider } from "@/src/toast";
 
 // Disable logbox errors etc so that users can see the app
@@ -29,9 +31,13 @@ const FRAME_INSETS =
 // Restores the saved token and loads the profile once on launch.
 function SessionBootstrap({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
+  const signedIn = useAppSelector((s) => !!s.auth.token && !!s.auth.user);
   useEffect(() => {
     dispatch(restoreSession());
   }, [dispatch]);
+  // Push: register this device's FCM token once signed in (and on every refresh);
+  // a message received while the app is open also refreshes the notification list.
+  useEffect(() => (signedIn ? syncDeviceToken(() => dispatch(fetchNotifications())) : undefined), [signedIn, dispatch]);
   return <>{children}</>;
 }
 

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "376102525734",
+    "project_id": "countygreen",
+    "storage_bucket": "countygreen.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:376102525734:android:fa5d2180e25eda7b5affe7",
+        "android_client_info": {
+          "package_name": "com.countygreens.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCnl0lcmToaed8ionB3y1btjSchEX2CTcE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
