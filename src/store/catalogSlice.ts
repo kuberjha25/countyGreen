@@ -2,10 +2,10 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
 import { request } from "@/src/api";
 import type { Entry } from "@/src/store/list";
-import type { Envelope, InventoryCategory, Paginated, Project, Tower } from "@/src/types";
+import type { Envelope, InventoryCategory, InventoryUnit, Paginated, Project, Tower } from "@/src/types";
 
 // Projects and "Our Products" (inventory categories, e.g. 500 Sq. Yards).
-export type Product = InventoryCategory & { project_id: number; project_name: string; towers: string[] };
+export type Product = InventoryCategory & { project_id: number; project_name: string; towers: string[]; tower_ids: number[] };
 type CatalogState = { projects: Entry<Project[]>; projectById: Record<number, Entry<Project>>; products: Entry<Product[]> };
 const initialState: CatalogState = { projects: { status: "idle" }, projectById: {}, products: { status: "idle" } };
 
@@ -28,12 +28,22 @@ export const fetchProducts = createAsyncThunk("catalog/products", async () => {
         if (prev) {
           prev.inventories_count = (prev.inventories_count ?? 0) + (c.inventories_count ?? 0);
           if (!prev.towers.includes(towerName)) prev.towers.push(towerName);
-        } else merged.set(key, { ...c, project_id: p.id, project_name: p.name, towers: [towerName] });
+          if (!prev.tower_ids.includes(t.id)) prev.tower_ids.push(t.id);
+        } else merged.set(key, { ...c, project_id: p.id, project_name: p.name, towers: [towerName], tower_ids: [t.id] });
       }
     }
   }
   return [...merged.values()];
 });
+
+// Units of one product (GET /api/inventory per tower — not paginated).
+export const fetchProductUnits = createAsyncThunk("catalog/productUnits", async (p: Product) => {
+  const lists = await Promise.all(p.tower_ids.map((tower_id) => request<Envelope<InventoryUnit[]>>("/inventory", { query: { project_id: p.project_id, tower_id, category_id: p.id } })));
+  return lists.flatMap((r) => r.data ?? []);
+});
+
+// "Request for Availability" on a unit (POST /api/inventory-request; the server derives project and tower).
+export const requestAvailability = createAsyncThunk("catalog/requestAvailability", async (inventoryId: number) => request<{ message: string }>("/inventory-request", { method: "POST", body: { inventory_id: inventoryId } }));
 
 const slice = createSlice({
   name: "catalog",

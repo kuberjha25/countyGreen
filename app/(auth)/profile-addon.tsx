@@ -5,8 +5,9 @@ import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboa
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { lookupPincode } from "@/src/api";
-import { partnerTypeName, STATES } from "@/src/brand";
-import { Button, Field, Header, ScreenTitle, SectionLabel, Select, StepIndicator, useScreenStyles } from "@/src/components/ui";
+import { partnerTypeName } from "@/src/brand";
+import { StateCityFields, useMatchState } from "@/src/components/location";
+import { Button, Field, Header, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
 import { useAppDispatch, useAppSelector } from "@/src/store";
 import { updateDraft } from "@/src/store/authSlice";
 import { spacing } from "@/src/theme";
@@ -32,12 +33,13 @@ export default function ProfileAddon() {
   });
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const matchState = useMatchState();
 
   const onPincode = async (v: string) => {
     const pin = v.replace(/\D/g, "").slice(0, 6);
     set("pincode")(pin);
     const r = await lookupPincode(pin);
-    if (r) setF((x) => ({ ...x, city: r.city, state: r.state }));
+    if (r) setF((x) => ({ ...x, city: r.city, state: matchState(r.state) }));
   };
 
   const submit = () => {
@@ -88,11 +90,8 @@ export default function ProfileAddon() {
 
         <SectionLabel>Address</SectionLabel>
         <Field label="Address" placeholder="Street / Locality" value={f.address} onChangeText={set("address")} icon="location-outline" testID="address-input" />
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <Field label="PIN code" placeholder="160001" value={f.pincode} onChangeText={onPincode} keyboardType="number-pad" maxLength={6} error={errors.pincode} containerStyle={{ flex: 1 }} testID="pincode-input" />
-          <Field label="City" placeholder="City" value={f.city} onChangeText={set("city")} containerStyle={{ flex: 1 }} testID="city-input" />
-        </View>
-        <Select label="State" value={f.state} options={STATES.includes(f.state) || !f.state ? STATES : [f.state, ...STATES]} onChange={set("state")} placeholder="State" testID="state-select" />
+        <Field label="PIN code" placeholder="160001" value={f.pincode} onChangeText={onPincode} keyboardType="number-pad" maxLength={6} error={errors.pincode} testID="pincode-input" />
+        <StateCityFields state={f.state} city={f.city} onChange={(v) => setF((x) => ({ ...x, ...v }))} testIDPrefix="profile" />
         <Text style={s.caption}>City and state fill in automatically from the PIN code.</Text>
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>

@@ -2,19 +2,32 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
 import { request } from "@/src/api";
 import { addListCases, emptyList, Entry, ListArgs, ListState, cleanParams } from "@/src/store/list";
-import type { DocumentItem, Envelope, NewsItem, NotificationItem, Paginated, ProjectDocuments } from "@/src/types";
+import type { DocumentItem, Envelope, NewsItem, NotificationItem, Paginated, ProjectDocuments, Promotion, RsvpStatus } from "@/src/types";
 
 type ContentState = {
   news: ListState<NewsItem>;
   newsById: Record<number, Entry<NewsItem>>;
+  events: ListState<Promotion>;
+  promotionById: Record<number, Entry<Promotion>>;
   documents: Entry<DocumentItem[]>;
   notifications: Entry<NotificationItem[]>;
 };
-const initialState: ContentState = { news: emptyList<NewsItem>(), newsById: {}, documents: { status: "idle" }, notifications: { status: "idle" } };
+const initialState: ContentState = { news: emptyList<NewsItem>(), newsById: {}, events: emptyList<Promotion>(), promotionById: {}, documents: { status: "idle" }, notifications: { status: "idle" } };
 
 // GET /api/news — category (projects | construction_updates | offers | events), search, page.
 export const fetchNews = createAsyncThunk("content/news", async ({ params, page = 1 }: ListArgs) => (await request<Envelope<Paginated<NewsItem>>>("/news", { query: { ...cleanParams(params), page } })).data);
 export const fetchNewsItem = createAsyncThunk("content/newsItem", async (id: number) => (await request<Envelope<NewsItem>>(`/news/${id}`)).data);
+
+// Events = GET /api/promotions?promotion_type=event (search, project_id, page).
+export const fetchEvents = createAsyncThunk("content/events", async ({ params, page = 1 }: ListArgs) =>
+  (await request<Envelope<Paginated<Promotion>>>("/promotions", { query: { ...cleanParams(params), promotion_type: "event", page } })).data,
+);
+export const fetchPromotion = createAsyncThunk("content/promotion", async (id: number) => (await request<Envelope<Promotion>>(`/promotions/${id}`)).data);
+// Creates or updates the partner's RSVP (events only).
+export const rsvpEvent = createAsyncThunk("content/rsvp", async ({ id, status }: { id: number; status: RsvpStatus }) => {
+  const r = await request<{ message: string }>(`/promotions/${id}/rsvp`, { method: "POST", body: { status } });
+  return { message: r.message };
+});
 
 // GET /api/documents is grouped by project; flattened here (all pages).
 export const fetchDocuments = createAsyncThunk("content/documents", async () => {
@@ -45,6 +58,22 @@ const slice = createSlice({
   reducers: {},
   extraReducers: (b) => {
     addListCases(b, fetchNews, (s) => s.news);
+    addListCases(b, fetchEvents, (s) => s.events);
+    b.addCase(fetchPromotion.pending, (s, a) => {
+      s.promotionById[a.meta.arg] = { ...s.promotionById[a.meta.arg], status: "loading", error: undefined };
+    })
+      .addCase(fetchPromotion.fulfilled, (s, a) => {
+        s.promotionById[a.meta.arg] = { data: a.payload, status: "succeeded" };
+      })
+      .addCase(fetchPromotion.rejected, (s, a) => {
+        s.promotionById[a.meta.arg] = { ...s.promotionById[a.meta.arg], status: "failed", error: a.error.message };
+      })
+      .addCase(rsvpEvent.fulfilled, (s, a) => {
+        const { id, status } = a.meta.arg;
+        const p = s.promotionById[id]?.data;
+        if (p) p.rsvp_status = status;
+        s.events.items.forEach((e) => e.id === id && (e.rsvp_status = status));
+      });
     b.addCase(fetchNewsItem.pending, (s, a) => {
       s.newsById[a.meta.arg] = { ...s.newsById[a.meta.arg], status: "loading", error: undefined };
     })

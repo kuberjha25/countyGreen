@@ -34,7 +34,7 @@ export default function ProfileCompany() {
   const dispatch = useAppDispatch();
   const draft = useAppSelector((st) => st.auth.draft);
   const isCp = draft.partner_type === "channel_partner";
-  const docs = useCpDocuments();
+  const docs = useCpDocuments(isCp ? draft.business_type : undefined);
   const [files, setFiles] = useState<Record<string, PickedFile>>({});
   const [run, submitting] = useRun();
 
@@ -49,6 +49,7 @@ export default function ProfileCompany() {
   };
 
   const submit = async () => {
+    if (isCp && docs.status !== "succeeded") return toast.show(docs.status === "failed" ? "Could not load the document list — tap Retry" : "Loading the document list…", "error");
     const list = isCp ? docs.data ?? [] : [];
     const missing = list.filter((d) => d.is_mandatory && !files[d.field_key]);
     if (missing.length) return toast.show(`Please upload: ${missing.map((m) => m.name).join(", ")}`, "error");
@@ -78,7 +79,7 @@ export default function ProfileCompany() {
         {isCp ? (
           <>
             <SectionLabel>Upload Documents</SectionLabel>
-            {docs.status === "loading" ? <Loading /> : docs.status === "failed" ? <ErrorState message={docs.error ?? "Could not load the document list"} onRetry={() => dispatch(fetchCpDocuments())} /> : null}
+            {docs.status === "loading" ? <Loading /> : docs.status === "failed" ? <ErrorState message={docs.error ?? "Could not load the document list"} onRetry={() => dispatch(fetchCpDocuments(draft.business_type))} /> : null}
             {docs.status === "succeeded" && !(docs.data ?? []).length ? <Text style={s.bodyMuted}>No documents are required right now.</Text> : null}
             <View style={{ gap: 10 }}>
               {(docs.data ?? []).map((d) => {

@@ -5,7 +5,8 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } fr
 
 import { useCan } from "@/src/auth";
 import { PARTNER_TYPES, partnerTypeName } from "@/src/brand";
-import { Avatar, Badge, BottomNav, Button, ChipRow, EmptyState, ErrorState, FAB, Header, Loading, SearchBar, Segmented, useScreenStyles } from "@/src/components/ui";
+import { activeFilterCount, Avatar, Badge, BottomNav, Button, ChipRow, EmptyState, ErrorState, FAB, FilterSheet, FilterValues, Header, Loading, SearchBar, Segmented, useScreenStyles } from "@/src/components/ui";
+import { DATE_FILTERS, dateParams } from "@/src/types";
 import { useAppDispatch, useAppSelector } from "@/src/store";
 import { fetchRegistrations } from "@/src/store/registrationsSlice";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -33,7 +34,10 @@ export default function Registrations() {
     const t = setTimeout(() => setSearch(q.trim()), 400);
     return () => clearTimeout(t);
   }, [q]);
-  const load = useCallback((page = 1) => dispatch(fetchRegistrations({ params: { status, search: search || undefined }, page })), [dispatch, status, search]);
+  const [filters, setFilters] = useState<FilterValues>({});
+  const [showFilters, setShowFilters] = useState(false);
+  const dateKey = JSON.stringify(dateParams(filters));
+  const load = useCallback((page = 1) => dispatch(fetchRegistrations({ params: { status, search: search || undefined, ...JSON.parse(dateKey) }, page })), [dispatch, status, search, dateKey]);
   useEffect(() => {
     load(1);
   }, [load]);
@@ -50,7 +54,7 @@ export default function Registrations() {
       <View style={[s.content, { paddingBottom: spacing.sm }]}>
         <Text style={[s.h2, { fontSize: 30, marginBottom: spacing.md }]}>Registrations</Text>
         <View style={{ marginBottom: spacing.md }}><Segmented options={STATUS} labels={{ pending: "Pending", completed: "Completed" }} value={status} onChange={setStatus} testIDPrefix="registrations-segment" /></View>
-        <SearchBar value={q} onChange={setQ} placeholder="Search name, mobile or email" testID="registrations-search" />
+        <SearchBar value={q} onChange={setQ} placeholder="Search name, mobile or email" onFilter={() => setShowFilters(true)} filterCount={activeFilterCount(filters)} testID="registrations-search" />
       </View>
       <ChipRow options={[ALL, ...PARTNER_TYPES.map((p) => p.key)]} value={type} onChange={setType} testIDPrefix="reg-cat" />
       <View style={{ flex: 1 }}>
@@ -85,6 +89,7 @@ export default function Registrations() {
         )}
         {can("registrations", "add") ? <FAB onPress={() => router.push("/registrations/new")} testID="registrations-fab" /> : null}
       </View>
+      <FilterSheet visible={showFilters} onClose={() => setShowFilters(false)} groups={[{ key: "date", label: "Registered", options: Object.values(DATE_FILTERS), customOption: DATE_FILTERS.custom }]} value={filters} onApply={setFilters} />
       <BottomNav />
     </View>
   );

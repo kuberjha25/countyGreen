@@ -61,7 +61,7 @@ export default function ProfileSocial() {
 
         {knows ? (
           <>
-            <ReferenceChooser value={employee} onChange={setEmployee} userType="backoffice" label="Associated employee" error={err} testID="employee-select" />
+            <ReferenceChooser value={employee} onChange={setEmployee} userType="backoffice" publicLookup label="Associated employee" error={err} testID="employee-select" />
           </>
         ) : null}
 

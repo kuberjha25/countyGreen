@@ -15,7 +15,8 @@ import { fmtDate } from "@/src/format";
 import { useAppSelector } from "@/src/store";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
-import { BUSINESS_TYPES, label } from "@/src/types";
+import { useBusinessTypes } from "@/src/lookups";
+import { label } from "@/src/types";
 
 // Screen 25 · Profile (GET /api/auth/profile)
 export default function Profile() {
@@ -30,6 +31,8 @@ export default function Profile() {
   const staff = isStaff(user);
   const [confirm, setConfirm] = useState(false);
   const pp = user?.partner_profile;
+  const businessTypes = useBusinessTypes();
+  const businessName = businessTypes.data?.find((b) => b.slug === pp?.business_type)?.name ?? label({}, pp?.business_type);
   const name = user?.name || "County Green";
   const roleName = staff ? user?.role?.name ?? "Staff" : partnerTypeName(pp?.partner_type);
   const photo = user?.profile_photo ? `${BASE_URL}/storage/${user.profile_photo}` : null;
@@ -38,6 +41,8 @@ export default function Profile() {
     { label: "Admin & Settings", icon: "settings-outline", route: "/admin", testID: "menu-admin", show: staff },
     { label: "Edit profile", icon: "create-outline", route: "/profile-edit", testID: "menu-edit-profile" },
     { label: "Registrations", icon: "person-add-outline", route: "/registrations", testID: "menu-registrations", show: staff },
+    { label: "My Requests", icon: "document-attach-outline", route: "/requests", testID: "menu-requests", show: !staff },
+    { label: "Events", icon: "calendar-number-outline", route: "/events", testID: "menu-events" },
     { label: "Birthday & anniversary greetings", icon: "gift-outline", route: "/greetings", testID: "menu-greetings", show: staff },
     { label: "MIS Report", icon: "stats-chart-outline", route: "/mis", testID: "menu-mis" },
     { label: "Notifications", icon: "notifications-outline", route: "/notifications", testID: "menu-notifications" },
@@ -98,7 +103,7 @@ export default function Profile() {
               <Card>
                 <InfoRow icon="pricetag-outline" label="Partner type" value={partnerTypeName(pp.partner_type)} />
                 {pp.company_name ? <InfoRow icon="business-outline" label="Company / Firm" value={pp.company_name} /> : null}
-                {pp.business_type ? <InfoRow icon="git-network-outline" label="Business type" value={label(BUSINESS_TYPES, pp.business_type)} /> : null}
+                {pp.business_type ? <InfoRow icon="git-network-outline" label="Business type" value={businessName} /> : null}
                 {pp.partner_type === "influencer" ? (
                   <>
                     <InfoRow icon="logo-instagram" label="Instagram" value={pp.instagram_link ?? undefined} />

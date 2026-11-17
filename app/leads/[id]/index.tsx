@@ -1,15 +1,19 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import Animated, { FadeInUp } from "react-native-reanimated";
 
+import { errorMessage } from "@/src/api";
 import { useCan } from "@/src/auth";
 import { Timeline } from "@/src/components/sections";
-import { Avatar, Badge, BottomNav, Button, Card, COMING_SOON, ErrorState, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
+import { Avatar, Badge, BottomNav, BottomSheet, Button, Card, ChoiceChips, COMING_SOON, ErrorState, Field, Header, InfoRow, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fmtDate } from "@/src/format";
+import { useLeadStatuses } from "@/src/lookups";
 import { useAppDispatch, useAppSelector } from "@/src/store";
-import { fetchLead } from "@/src/store/leadsSlice";
+import { completeFollowup, fetchLead, updateLead } from "@/src/store/leadsSlice";
+import { fetchLeadStatuses } from "@/src/store/lookupsSlice";
+import { useRun } from "@/src/store/useRun";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 import { isMasked, label, LEAD_STATUS_LABEL } from "@/src/types";
@@ -36,6 +40,39 @@ export default function LeadDetail() {
   const callable = !!l?.mobile && !isMasked(l.mobile);
   const converted = l?.status === "converted" || l?.status === "booked";
   const staff = can("leads", "edit");
+  const statuses = useLeadStatuses();
+  const [run, saving] = useRun();
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [newStatus, setNewStatus] = useState("");
+  const [statusRemarks, setStatusRemarks] = useState("");
+  const [completing, setCompleting] = useState<number | null>(null);
+  const [doneRemarks, setDoneRemarks] = useState("");
+  const [sheetErr, setSheetErr] = useState<string | undefined>();
+
+  // PUT /api/leads/{id} { status, remarks } — remarks required (min 3 characters).
+  const saveStatus = async () => {
+    if (!newStatus) return setSheetErr("Select the new status");
+    if (statusRemarks.trim().length < 3) return setSheetErr("Add remarks (at least 3 characters)");
+    try {
+      await run(updateLead({ id: Number(id), body: { status: newStatus, remarks: statusRemarks.trim() } }));
+      setStatusOpen(false);
+      toast.show("Lead status updated", "success");
+    } catch (e) {
+      setSheetErr(errorMessage(e));
+    }
+  };
+
+  const saveComplete = async () => {
+    if (completing === null) return;
+    if (!doneRemarks.trim()) return setSheetErr("Add completion remarks");
+    try {
+      const r = await run<{ message?: string }>(completeFollowup({ id: Number(id), followupId: completing, remarks: doneRemarks.trim() }));
+      setCompleting(null);
+      toast.show(r?.message || "Follow-up marked as completed", "success");
+    } catch (e) {
+      setSheetErr(errorMessage(e));
+    }
+  };
 
   return (
     <View style={s.screen} testID="lead-detail-screen">
@@ -100,18 +137,36 @@ export default function LeadDetail() {
                 <SectionLabel style={{ marginTop: spacing.xl }}>Document Requests (CRM)</SectionLabel>
                 <Card>
                   <Text style={s.bodyMuted}>Need the booking form, allotment letter or receipts for this customer? Raise a request to the CRM team.</Text>
-                  <Button label="Request documents" icon="document-attach-outline" variant="secondary" small onPress={() => toast.show(COMING_SOON, "info")} style={{ marginTop: spacing.md }} testID="request-documents-button" />
+                  <Button label="Request documents" icon="document-attach-outline" variant="secondary" small onPress={() => router.push({ pathname: "/requests/new", params: { leadName: l.full_name, leadMobile: l.mobile } })} style={{ marginTop: spacing.md }} testID="request-documents-button" />
                 </Card>
               </>
             ) : null}
 
             <SectionLabel style={{ marginTop: spacing.xl }}>Activity History</SectionLabel>
-            <Card><Timeline items={(l.history ?? []).map((h) => ({ title: h.activity, detail: h.user_name ? `by ${h.user_name}` : undefined, at: h.date }))} /></Card>
+            <Card>
+              <Timeline
+                items={(l.history ?? []).map((h, i) => {
+                  const task = h.type === "task" && h.id !== undefined;
+                  return {
+                    title: h.activity,
+                    at: h.time ? `${h.date}T${h.time}` : h.date,
+                    detail: [h.remarks, h.user_name && `by ${h.user_name}`].filter(Boolean).join(" · ") || undefined,
+                    badge: task ? <Badge label={h.is_completed ? "Completed" : "Pending"} tone={h.is_completed ? "success" : "warning"} small /> : undefined,
+                    footer: !task ? undefined : h.is_completed ? (
+                      h.completion_remarks ? <Text style={[s.caption, { marginTop: 4 }]}>{h.completion_remarks}</Text> : undefined
+                    ) : staff ? (
+                      <Button label="Mark complete" icon="checkmark-done-outline" variant="secondary" small onPress={() => { setDoneRemarks(""); setSheetErr(undefined); setCompleting(h.id!); }} style={{ marginTop: 8, alignSelf: "flex-start" }} testID={`followup-complete-${h.id ?? i}`} />
+                    ) : undefined,
+                  };
+                })}
+              />
+            </Card>
 
             {staff ? (
               <>
                 <SectionLabel style={{ marginTop: spacing.xl }}>Manage Lead</SectionLabel>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                  <Button label="Update status" icon="flag-outline" variant="secondary" small onPress={() => { setNewStatus(""); setStatusRemarks(""); setSheetErr(undefined); setStatusOpen(true); }} style={{ flexGrow: 1 }} testID="lead-status-button" />
                   <Button label="Edit details" icon="create-outline" variant="secondary" small onPress={() => router.push(`/leads/${id}/edit`)} style={{ flexGrow: 1 }} testID="lead-edit-button" />
                   <Button label="Reassign" icon="swap-horizontal-outline" variant="secondary" small onPress={() => toast.show(COMING_SOON, "info")} style={{ flexGrow: 1 }} testID="lead-reassign-button" />
                   <Button label="Delete" icon="trash-outline" variant="danger" small onPress={() => toast.show(COMING_SOON, "info")} style={{ flexGrow: 1 }} testID="lead-delete-button" />
@@ -125,6 +180,20 @@ export default function LeadDetail() {
               <Button label="Follow-up" icon="create-outline" onPress={() => router.push(`/leads/${id}/update`)} style={{ flex: 1 }} testID="lead-update-button" />
             </View>
           ) : null}
+
+          <BottomSheet visible={statusOpen} onClose={() => setStatusOpen(false)} title="Update status" subtitle={`Currently ${label(LEAD_STATUS_LABEL, l.status)}`} testID="lead-status-sheet">
+            {statuses.status === "failed" ? <ErrorState message={statuses.error ?? "Could not load statuses"} onRetry={() => dispatch(fetchLeadStatuses())} /> : null}
+            <ChoiceChips label="New status" value={statuses.data?.find((o) => String(o.id) === newStatus)?.name} options={(statuses.data ?? []).map((o) => o.name)} onChange={(name) => setNewStatus(String(statuses.data?.find((o) => o.name === name)?.id ?? ""))} testID="lead-status-options" />
+            <Field label="Remarks" placeholder="Why is the status changing?" value={statusRemarks} onChangeText={setStatusRemarks} multiline maxLength={500} error={sheetErr} testID="lead-status-remarks" />
+            <Button label="Save status" variant="gold" onPress={saveStatus} loading={saving} testID="lead-status-save" />
+            <Button label="Cancel" variant="ghost" small onPress={() => setStatusOpen(false)} style={{ marginTop: 8 }} testID="lead-status-cancel" />
+          </BottomSheet>
+
+          <BottomSheet visible={completing !== null} onClose={() => setCompleting(null)} title="Mark follow-up complete" subtitle="Add what happened on this follow-up." testID="followup-complete-sheet">
+            <Field label="Completion remarks" placeholder="e.g. Client answered, wants to visit next week" value={doneRemarks} onChangeText={setDoneRemarks} multiline error={sheetErr} testID="followup-complete-remarks" />
+            <Button label="Mark complete" variant="gold" onPress={saveComplete} loading={saving} testID="followup-complete-save" />
+            <Button label="Cancel" variant="ghost" small onPress={() => setCompleting(null)} style={{ marginTop: 8 }} testID="followup-complete-cancel" />
+          </BottomSheet>
         </>
       )}
       <BottomNav active="leads" />

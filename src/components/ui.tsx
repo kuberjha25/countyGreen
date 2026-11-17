@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAuth } from "@/src/auth";
 import { LEAF } from "@/src/brand";
+import { dmyToIso } from "@/src/format";
 import { TABS, TabName } from "@/src/nav";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
@@ -571,38 +572,75 @@ export function Stat({ value, label, tone = "brand", testID }: { value: string |
 /* Filter sheet                                                        */
 /* ------------------------------------------------------------------ */
 export const FILTER_ALL = "All";
-export type FilterGroup = { key: string; label: string; options: string[] };
+// customOption: choosing this option shows From / To date fields, stored as `${key}_from` /
+// `${key}_to` (YYYY-MM-DD).
+export type FilterGroup = { key: string; label: string; options: string[]; customOption?: string };
 export type FilterValues = Record<string, string>;
 
-export const activeFilterCount = (v: FilterValues) => Object.values(v).filter((x) => x && x !== FILTER_ALL).length;
+export const activeFilterCount = (v: FilterValues) => Object.entries(v).filter(([k, x]) => x && x !== FILTER_ALL && !/_(from|to)$/.test(k)).length;
+
+const isoToDmy = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v.split("-").reverse().join("-") : "");
 
 export function FilterSheet({ visible, onClose, groups, value, onApply }: { visible: boolean; onClose: () => void; groups: FilterGroup[]; value: FilterValues; onApply: (v: FilterValues) => void }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState<FilterValues>(value);
+  const [typed, setTyped] = useState<Record<string, string>>({});
+  const [err, setErr] = useState<string | undefined>();
+  const open = () => {
+    setDraft(value);
+    setErr(undefined);
+    setTyped(Object.fromEntries(Object.entries(value).filter(([k]) => /_(from|to)$/.test(k)).map(([k, v]) => [k, isoToDmy(v)])));
+  };
+  const apply = () => {
+    const next = { ...draft };
+    for (const g of groups) {
+      delete next[`${g.key}_from`];
+      delete next[`${g.key}_to`];
+      if (!g.customOption || draft[g.key] !== g.customOption) continue;
+      const from = dmyToIso(typed[`${g.key}_from`] ?? "");
+      const to = dmyToIso(typed[`${g.key}_to`] ?? "");
+      if (!from || !to) return setErr("Enter both dates as DD-MM-YYYY");
+      if (from > to) return setErr("The From date must be on or before the To date");
+      Object.assign(next, { [`${g.key}_from`]: from, [`${g.key}_to`]: to });
+    }
+    onApply(next);
+    onClose();
+  };
   return (
-    <Modal visible={visible} transparent animationType="fade" onShow={() => setDraft(value)} onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onShow={open} onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} testID="filter-backdrop">
         <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]} onPress={() => {}} testID="filter-sheet">
           <View style={styles.sheetHandle} />
           <Text style={styles.sheetTitle}>Filters</Text>
-          <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {groups.map((g) => (
-              <ChoiceChips key={g.key} label={g.label} options={[FILTER_ALL, ...g.options]} value={draft[g.key] || FILTER_ALL} onChange={(v) => setDraft((d) => ({ ...d, [g.key]: v }))} testID={`filter-${g.key}`} />
+              <View key={g.key}>
+                <ChoiceChips label={g.label} options={[FILTER_ALL, ...g.options]} value={draft[g.key] || FILTER_ALL} onChange={(v) => setDraft((d) => ({ ...d, [g.key]: v }))} testID={`filter-${g.key}`} />
+                {g.customOption && draft[g.key] === g.customOption ? (
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    {(["from", "to"] as const).map((end) => (
+                      <Field
+                        key={end}
+                        label={end === "from" ? "From" : "To"}
+                        placeholder="DD-MM-YYYY"
+                        value={typed[`${g.key}_${end}`] ?? ""}
+                        onChangeText={(v) => setTyped((t) => ({ ...t, [`${g.key}_${end}`]: v.replace(/[^\d-]/g, "").slice(0, 10) }))}
+                        keyboardType="numbers-and-punctuation"
+                        maxLength={10}
+                        containerStyle={{ flex: 1 }}
+                        testID={`filter-${g.key}-${end}`}
+                      />
+                    ))}
+                  </View>
+                ) : null}
+              </View>
             ))}
+            {err ? <Text style={styles.errorText} testID="filter-error">{err}</Text> : null}
           </ScrollView>
           <View style={{ flexDirection: "row", gap: 10, marginTop: spacing.sm }}>
-            <Button label="Reset" variant="secondary" small onPress={() => setDraft(Object.fromEntries(groups.map((g) => [g.key, FILTER_ALL])))} style={{ flex: 1 }} testID="filter-reset-button" />
-            <Button
-              label="Apply"
-              small
-              onPress={() => {
-                onApply(draft);
-                onClose();
-              }}
-              style={{ flex: 2 }}
-              testID="filter-apply-button"
-            />
+            <Button label="Reset" variant="secondary" small onPress={() => { setDraft(Object.fromEntries(groups.map((g) => [g.key, FILTER_ALL]))); setTyped({}); setErr(undefined); }} style={{ flex: 1 }} testID="filter-reset-button" />
+            <Button label="Apply" small onPress={apply} style={{ flex: 2 }} testID="filter-apply-button" />
           </View>
         </Pressable>
       </Pressable>

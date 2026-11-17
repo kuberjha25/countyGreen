@@ -5,12 +5,12 @@ import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } fr
 
 import { isStaff } from "@/src/access";
 import { useAuth, useCan } from "@/src/auth";
-import { activeFilterCount, Badge, Button, ChipRow, EmptyState, ErrorState, FAB, FILTER_ALL, FilterSheet, FilterValues, Header, Loading, SearchBar, useScreenStyles } from "@/src/components/ui";
+import { activeFilterCount, Badge, Button, ChipRow, EmptyState, ErrorState, FAB, FilterSheet, FilterValues, Header, Loading, SearchBar, useScreenStyles } from "@/src/components/ui";
 import { parseDate } from "@/src/format";
 import { useAppDispatch, useAppSelector } from "@/src/store";
 import { fetchVisits } from "@/src/store/visitsSlice";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
-import { DATE_FILTERS, label, VISIT_STATUS_LABEL, VISIT_STATUSES } from "@/src/types";
+import { DATE_FILTERS, dateParams, label, VISIT_STATUS_LABEL, VISIT_STATUSES } from "@/src/types";
 
 const ALL = "All";
 const TABS = [ALL, ...VISIT_STATUSES.map((s) => VISIT_STATUS_LABEL[s])];
@@ -47,11 +47,10 @@ export default function Visits() {
     return () => clearTimeout(t);
   }, [q]);
 
-  const on = (k: string) => !!filters[k] && filters[k] !== FILTER_ALL;
   const query = {
     status: statusFromTab(tab),
     search: search || undefined,
-    date_filter: on("date") ? Object.keys(DATE_FILTERS).find((k) => DATE_FILTERS[k as keyof typeof DATE_FILTERS] === filters.date) : undefined,
+    ...dateParams(filters),
   };
   const key = JSON.stringify(query);
   const load = useCallback((page = 1) => dispatch(fetchVisits({ params: JSON.parse(key), page })), [dispatch, key]);
@@ -62,7 +61,7 @@ export default function Visits() {
     if (list.status === "idle" && list.page > 0) load(1);
   }, [list.status, list.page, load]);
 
-  const groups = [{ key: "date", label: "Visit date", options: Object.values(DATE_FILTERS) }];
+  const groups = [{ key: "date", label: "Visit date", options: Object.values(DATE_FILTERS), customOption: DATE_FILTERS.custom }];
   const filterCount = activeFilterCount(filters);
   const more = list.page < list.lastPage;
 

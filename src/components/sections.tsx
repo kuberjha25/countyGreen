@@ -5,7 +5,7 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 
 import { useScreenStyles } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
-import { fmtDateTime } from "@/src/format";
+import { fmtDate, fmtDateTime } from "@/src/format";
 
 export type Section = { key: string; label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; render: () => React.ReactNode };
 
@@ -35,7 +35,9 @@ export function SectionTabs({ sections, testIDPrefix = "section-tab" }: { sectio
   );
 }
 
-export function Timeline({ items }: { items: { title: string; detail?: string; at?: string }[] }) {
+export type TimelineItem = { title: string; detail?: string; at?: string; badge?: React.ReactNode; footer?: React.ReactNode };
+// `at` = ISO date-time, or a bare YYYY-MM-DD (shown without a time).
+export function Timeline({ items }: { items: TimelineItem[] }) {
   const s = useScreenStyles();
   const styles = useStyles();
   if (!items?.length) return <Text style={s.bodyMuted}>No activity recorded yet.</Text>;
@@ -48,9 +50,13 @@ export function Timeline({ items }: { items: { title: string; detail?: string; a
             {i < items.length - 1 ? <View style={styles.tlLine} /> : null}
           </View>
           <View style={{ flex: 1, paddingBottom: 18 }}>
-            <Text style={s.caption}>{fmtDateTime(h.at)}</Text>
-            <Text style={[s.name, { marginTop: 2 }]}>{h.title}</Text>
+            <Text style={s.caption}>{h.at && /^\d{4}-\d{2}-\d{2}$/.test(h.at) ? fmtDate(h.at) : fmtDateTime(h.at)}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
+              <Text style={s.name}>{h.title}</Text>
+              {h.badge}
+            </View>
             {h.detail ? <Text style={[s.bodyMuted, { marginTop: 2 }]}>{h.detail}</Text> : null}
+            {h.footer}
           </View>
         </View>
       ))}

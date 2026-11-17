@@ -3,10 +3,11 @@ import React, { useEffect, useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 
 import { errorMessage } from "@/src/api";
-import { Avatar, Field, SearchBar, useScreenStyles } from "@/src/components/ui";
+import { Avatar, ChoiceChips, Field, SearchBar, useScreenStyles } from "@/src/components/ui";
 import { digits, waNumber } from "@/src/format";
+import { useBusinessTypes } from "@/src/lookups";
 import { useAppDispatch } from "@/src/store";
-import { searchReferences } from "@/src/store/lookupsSlice";
+import { fetchBusinessTypes, searchReferences } from "@/src/store/lookupsSlice";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import type { Reference } from "@/src/types";
 
@@ -18,6 +19,7 @@ export function ReferenceChooser({
   noneLabel,
   label = "Select user",
   error,
+  publicLookup,
   testID = "reference-chooser",
 }: {
   value?: Reference | null;
@@ -26,6 +28,7 @@ export function ReferenceChooser({
   noneLabel?: string; // when set, a "nobody" choice is offered
   label?: string;
   error?: string;
+  publicLookup?: boolean; // self-registration: call without a token
   testID?: string;
 }) {
   const s = useScreenStyles();
@@ -44,7 +47,7 @@ export function ReferenceChooser({
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const r = await dispatch(searchReferences({ search: q || undefined, userType })).unwrap();
+        const r = await dispatch(searchReferences({ search: q || undefined, userType, auth: !publicLookup })).unwrap();
         if (alive) {
           setItems(r.data ?? []);
           setFailed(undefined);
@@ -59,7 +62,7 @@ export function ReferenceChooser({
       alive = false;
       clearTimeout(t);
     };
-  }, [q, open, userType, dispatch]);
+  }, [q, open, userType, publicLookup, dispatch]);
 
   return (
     <View style={{ marginBottom: spacing.lg }} testID={testID}>
@@ -98,6 +101,40 @@ export function ReferenceChooser({
       )}
       {error ? <Text style={styles.err}>{error}</Text> : null}
     </View>
+  );
+}
+
+// Channel partner "Type of business" from GET /api/business-types — shows `name`, stores the `slug`.
+export function BusinessTypePicker({ value, onChange, error, testID = "business-type" }: { value: string; onChange: (slug: string) => void; error?: string; testID?: string }) {
+  const s = useScreenStyles();
+  const styles = useStyles();
+  const dispatch = useAppDispatch();
+  const types = useBusinessTypes();
+  const list = types.data ?? [];
+  if (types.status === "failed")
+    return (
+      <View style={{ marginBottom: spacing.lg }}>
+        <Text style={styles.label}>TYPE OF BUSINESS</Text>
+        <Text style={styles.err}>{types.error ?? "Could not load business types"}</Text>
+        <Pressable onPress={() => dispatch(fetchBusinessTypes())} hitSlop={8} testID={`${testID}-retry`}><Text style={[s.link, { marginTop: 6 }]}>Retry</Text></Pressable>
+      </View>
+    );
+  if (types.status === "succeeded" && !list.length)
+    return (
+      <View style={{ marginBottom: spacing.lg }}>
+        <Text style={styles.label}>TYPE OF BUSINESS</Text>
+        <Text style={styles.err} testID={`${testID}-empty`}>Business types are not set up on the County Green server yet, so channel partner registration cannot be completed. Please contact County Green.</Text>
+      </View>
+    );
+  return (
+    <ChoiceChips
+      label="Type of business"
+      value={list.find((b) => b.slug === value)?.name}
+      options={types.status === "loading" ? ["Loading…"] : list.map((b) => b.name)}
+      onChange={(name) => onChange(list.find((b) => b.name === name)?.slug ?? "")}
+      error={error}
+      testID={testID}
+    />
   );
 }
 

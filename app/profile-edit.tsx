@@ -6,8 +6,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { errorMessage, lookupPincode } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { STATES } from "@/src/brand";
-import { Button, Field, Header, ScreenTitle, SectionLabel, Select, useScreenStyles } from "@/src/components/ui";
+import { StateCityFields, useMatchState } from "@/src/components/location";
+import { Button, Field, Header, ScreenTitle, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { updateProfile } from "@/src/store/authSlice";
 import { useRun } from "@/src/store/useRun";
 import { spacing } from "@/src/theme";
@@ -25,12 +25,13 @@ export default function ProfileEdit() {
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [run, saving] = useRun();
+  const matchState = useMatchState();
 
   const onPincode = async (v: string) => {
     const pin = v.replace(/\D/g, "").slice(0, 6);
     set("pincode")(pin);
     const r = await lookupPincode(pin);
-    if (r) setF((x) => ({ ...x, city: r.city, state: r.state }));
+    if (r) setF((x) => ({ ...x, city: r.city, state: matchState(r.state) }));
   };
 
   const save = async () => {
@@ -61,11 +62,8 @@ export default function ProfileEdit() {
         <Field label="Mobile number" value={user?.mobile ?? ""} editable={false} rightIcon="lock-closed-outline" testID="edit-mobile" />
         <SectionLabel>Address</SectionLabel>
         <Field label="Address" value={f.address} onChangeText={set("address")} icon="location-outline" testID="edit-address" />
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <Field label="PIN code" value={f.pincode} onChangeText={onPincode} keyboardType="number-pad" maxLength={6} containerStyle={{ flex: 1 }} testID="edit-pincode" />
-          <Field label="City" value={f.city} onChangeText={set("city")} containerStyle={{ flex: 1 }} testID="edit-city" />
-        </View>
-        <Select label="State" value={f.state} options={STATES.includes(f.state) || !f.state ? STATES : [f.state, ...STATES]} onChange={set("state")} placeholder="State" testID="edit-state" />
+        <Field label="PIN code" value={f.pincode} onChangeText={onPincode} keyboardType="number-pad" maxLength={6} testID="edit-pincode" />
+        <StateCityFields state={f.state} city={f.city} onChange={(v) => setF((x) => ({ ...x, ...v }))} testIDPrefix="edit" />
         <Text style={s.caption}>Partner type and company details are updated by the County Green partner desk.</Text>
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>

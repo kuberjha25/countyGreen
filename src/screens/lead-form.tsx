@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
 import { errorMessage } from "@/src/api";
-import { STATES } from "@/src/brand";
+import { StateCityFields } from "@/src/components/location";
 import { ReferenceChooser } from "@/src/components/partners";
 import { ChoiceChips, ErrorState, Field, Header, Loading, OptionTile, Select, useScreenStyles } from "@/src/components/ui";
 import { FormWizard, WizardStep } from "@/src/components/wizard";
@@ -165,10 +165,7 @@ function LeadForm({ id, lead, initial }: { id?: number; lead?: LeadDetail; initi
         <View>
           <ChoiceChips label="Source of lead" value={f.source} options={(sources.data ?? []).map((o) => o.name)} onChange={set("source")} testID="lead-source" />
           <Field label="Address" placeholder="Address" value={f.address} onChangeText={set("address")} icon="location-outline" testID="lead-address-input" />
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <Field label="City" placeholder="City" value={f.city} onChangeText={set("city")} containerStyle={{ flex: 1 }} testID="lead-city-input" />
-            <View style={{ flex: 1 }}><Select label="State" value={f.state} options={STATES.includes(f.state) || !f.state ? STATES : [f.state, ...STATES]} onChange={set("state")} placeholder="State" testID="lead-state-select" /></View>
-          </View>
+          <StateCityFields state={f.state} city={f.city} onChange={(v) => setF((x) => ({ ...x, ...v }))} testIDPrefix="lead" />
           <Field label="Remarks" placeholder="Anything the sales team should know…" value={f.remarks} onChangeText={set("remarks")} multiline maxLength={500} testID="lead-notes-input" />
         </View>
       ),

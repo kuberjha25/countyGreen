@@ -8,10 +8,11 @@ import dashboard from "@/src/store/dashboardSlice";
 import leads from "@/src/store/leadsSlice";
 import lookups from "@/src/store/lookupsSlice";
 import registrations from "@/src/store/registrationsSlice";
+import requests from "@/src/store/requestsSlice";
 import visits from "@/src/store/visitsSlice";
 import { API_LOGS, setUnauthorizedHandler } from "@/src/api";
 
-const appReducer = combineReducers({ auth, catalog, content, dashboard, leads, lookups, registrations, visits });
+const appReducer = combineReducers({ auth, catalog, content, dashboard, leads, lookups, registrations, requests, visits });
 
 // Logging out (or an expired token) clears every slice except the auth "ready" flag.
 const rootReducer = (state: ReturnType<typeof appReducer> | undefined, action: UnknownAction) => {

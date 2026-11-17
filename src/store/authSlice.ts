@@ -52,8 +52,11 @@ export const restoreSession = createAsyncThunk("auth/restore", async () => {
 export const sendOtp = createAsyncThunk("auth/sendOtp", async (mobile: string) => request<{ message: string; otp?: string | number }>("/auth/send-otp", { method: "POST", body: { mobile }, auth: false }));
 
 export const verifyOtp = createAsyncThunk("auth/verifyOtp", async ({ mobile, otp }: { mobile: string; otp: string }) => {
-  const r = await request<{ is_new_user: boolean; token: string | null; user: User | null }>("/auth/verify-otp", { method: "POST", body: { mobile, otp, ...(await pushFields()) }, auth: false });
-  if (r.is_new_user || !r.token) return { mobile, isNewUser: true as const, token: null, profile: null };
+  const r = await request<{ is_new_user: boolean; token: string | null; user: User | null; message?: string }>("/auth/verify-otp", { method: "POST", body: { mobile, otp, ...(await pushFields()) }, auth: false });
+  // New user → self-registration. Registered but not approved by Admin yet → no token: stay signed out.
+  // (An inactive account is an HTTP 403, thrown with the server's message.)
+  if (r.is_new_user) return { mobile, isNewUser: true as const, token: null, profile: null };
+  if (!r.token) throw new Error(r.message && !/success/i.test(r.message) ? r.message : "Your registration is pending approval by County Green. You can sign in once it is approved.");
   await setToken(r.token);
   return { mobile, isNewUser: false as const, token: r.token, profile: await loadProfile() };
 });

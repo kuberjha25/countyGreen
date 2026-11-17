@@ -13,14 +13,14 @@ import { addFollowup, FollowupInput } from "@/src/store/leadsSlice";
 import { useRun } from "@/src/store/useRun";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
-import { label, LEAD_STATUS_LABEL, LEAD_TYPES, LEAD_UPDATE_STATUSES } from "@/src/types";
+import { label, LEAD_STATUS_LABEL, LEAD_TYPES } from "@/src/types";
 
 const KEEP = "No change";
 const days = (n: number) => Array.from({ length: n }, (_, i) => new Date(Date.now() + i * 86400000));
 const cap = (v: string) => v[0].toUpperCase() + v.slice(1);
 
-// Screen 14 · Follow-up / Update Lead (POST /api/leads/{id}/followups) — the note is required;
-// status and lead type are optional and update the lead too ("converted" is set by the server only).
+// Screen 14 · Follow-up (POST /api/leads/{id}/followups) — the note is required; lead type is sent
+// only when changed. Status is not sent here (changed from Lead Detail → "Update status").
 export default function UpdateLead() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const s = useScreenStyles();
@@ -35,7 +35,6 @@ export default function UpdateLead() {
   const [time, setTime] = useState("");
   const [activity, setActivity] = useState("Follow Up");
   const [remarks, setRemarks] = useState("");
-  const [status, setStatus] = useState(KEEP);
   const [leadType, setLeadType] = useState(KEEP);
   const [err, setErr] = useState<string | undefined>();
   const [run, saving] = useRun();
@@ -45,8 +44,7 @@ export default function UpdateLead() {
     setErr(undefined);
     const body: FollowupInput = { followup_date: date, remarks: remarks.trim(), activity: activity.trim() || undefined };
     if (time) body.followup_time = time;
-    if (status !== KEEP) body.status = LEAD_UPDATE_STATUSES.find((st) => LEAD_STATUS_LABEL[st] === status);
-    if (leadType !== KEEP) body.lead_type = leadType.toLowerCase();
+    if (leadType !== KEEP && leadType.toLowerCase() !== lead?.lead_type) body.lead_type = leadType.toLowerCase();
     try {
       await run(addFollowup({ id: Number(id), body }));
       toast.show("Follow-up added", "success");
@@ -82,7 +80,6 @@ export default function UpdateLead() {
         <Field label="Note" placeholder="What was discussed? Next steps…" value={remarks} onChangeText={setRemarks} multiline error={err} testID="notes-input" />
 
         <SectionLabel>Update lead (optional)</SectionLabel>
-        <ChoiceChips label="Lead status" value={status} options={[KEEP, ...LEAD_UPDATE_STATUSES.map((st) => LEAD_STATUS_LABEL[st])]} onChange={setStatus} testID="status" />
         <ChoiceChips label="Lead type" value={leadType} options={[KEEP, ...LEAD_TYPES.map(cap)]} onChange={setLeadType} testID="lead-type" />
         <Text style={s.caption}>Every follow-up is recorded in the lead{"'"}s activity history.</Text>
       </KeyboardAwareScrollView>

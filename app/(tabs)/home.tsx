@@ -78,6 +78,8 @@ export default function Home() {
         { title: "Our Products", icon: "map-outline", sub: "Request for availability", pathname: "/(tabs)/products" },
         { title: "Documents", icon: "document-text-outline", sub: "Brochures, plans & legal", pathname: "/documents" },
         { title: "Projects", icon: "business-outline", value: list.length || undefined, sub: "Project details", pathname: "/project", counted: true },
+        { title: "Events", icon: "calendar-number-outline", sub: "RSVP to County Green events", pathname: "/events" },
+        { title: "My Requests", icon: "document-attach-outline", sub: "Request documents & queries", pathname: "/requests" },
       ];
   const role = staff ? user?.role?.name ?? "Staff" : partnerTypeName(user?.partner_profile?.partner_type);
 

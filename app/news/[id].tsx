@@ -7,6 +7,7 @@ import { Pressable, ScrollView, Share, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { imageSource } from "@/src/brand";
+import { LinkifiedText } from "@/src/components/linkified";
 import { Badge, BottomNav, ErrorState, Loading, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { fmtDate, plainText } from "@/src/format";
 import { useAppDispatch, useAppSelector } from "@/src/store";
@@ -53,11 +54,11 @@ export default function Article() {
             <Text style={styles.title} testID="article-title">{n.title}</Text>
             <Text style={[s.caption, { marginTop: 10, marginBottom: spacing.xl }]}>{fmtDate(n.publish_date ?? undefined)}</Text>
             {n.short_description ? <Text style={[styles.para, styles.lead]}>{n.short_description}</Text> : null}
-            {plainText(n.content)
+            {plainText(n.content, { keepLinks: true })
               .split(/\n\s*\n/)
               .filter(Boolean)
               .map((p, i) => (
-                <Text key={i} style={styles.para}>{p}</Text>
+                <LinkifiedText key={i} style={styles.para}>{p}</LinkifiedText>
               ))}
             {(n.highlights ?? []).map((h, i) => (
               <View key={i} style={{ marginBottom: spacing.md }}>

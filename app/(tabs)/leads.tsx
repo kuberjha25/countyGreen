@@ -11,7 +11,7 @@ import { useAppDispatch, useAppSelector } from "@/src/store";
 import { fetchLeads } from "@/src/store/leadsSlice";
 import { makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
-import { DATE_FILTERS, label, LEAD_LIST_STATUSES, LEAD_STATUS_LABEL, LEAD_TYPES } from "@/src/types";
+import { DATE_FILTERS, dateParams, label, LEAD_LIST_STATUSES, LEAD_STATUS_LABEL, LEAD_TYPES } from "@/src/types";
 
 const ALL = "All";
 const TABS = [ALL, ...LEAD_LIST_STATUSES.map((s) => LEAD_STATUS_LABEL[s])];
@@ -56,7 +56,7 @@ export default function Leads() {
     status: statusFromTab(tab),
     search: search || undefined,
     lead_type: on("lead_type") ? filters.lead_type.toLowerCase() : undefined,
-    date_filter: on("date") ? Object.keys(DATE_FILTERS).find((k) => DATE_FILTERS[k as keyof typeof DATE_FILTERS] === filters.date) : undefined,
+    ...dateParams(filters),
   };
   const key = JSON.stringify(query);
   const load = useCallback((page = 1) => dispatch(fetchLeads({ params: JSON.parse(key), page })), [dispatch, key]);
@@ -69,7 +69,7 @@ export default function Leads() {
   }, [list.status, list.page, load]);
 
   const groups = [
-    { key: "date", label: "Date added", options: Object.values(DATE_FILTERS) },
+    { key: "date", label: "Date added", options: Object.values(DATE_FILTERS), customOption: DATE_FILTERS.custom },
     { key: "lead_type", label: "Lead type", options: LEAD_TYPES.map(cap) },
     { key: "source", label: "Lead source", options: (sources.data ?? []).map((o) => o.name) },
   ];

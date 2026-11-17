@@ -2,8 +2,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
+import { isStaff } from "@/src/access";
 import { errorMessage } from "@/src/api";
-import { STATES } from "@/src/brand";
+import { useAuth } from "@/src/auth";
+import { StateCityFields } from "@/src/components/location";
+import { ReferenceChooser } from "@/src/components/partners";
 import { ErrorState, Field, Loading, OptionTile, Select } from "@/src/components/ui";
 import { FormWizard } from "@/src/components/wizard";
 import { digits, fmtDay, isoDay } from "@/src/format";
@@ -12,10 +15,10 @@ import { useAppDispatch, useAppSelector } from "@/src/store";
 import { fetchLead } from "@/src/store/leadsSlice";
 import { fetchTimeSlots } from "@/src/store/lookupsSlice";
 import { useRun } from "@/src/store/useRun";
-import { createVisit } from "@/src/store/visitsSlice";
+import { createVisit, fetchLeadByMobile } from "@/src/store/visitsSlice";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
-import { isMasked } from "@/src/types";
+import { FoundLead, isMasked, Reference } from "@/src/types";
 
 const TEMPS = [{ k: "hot", label: "Hot", i: "flame-outline" }, { k: "warm", label: "Warm", i: "sunny-outline" }, { k: "cold", label: "Cold", i: "snow-outline" }] as const;
 const nextDays = (n: number) => Array.from({ length: n }, (_, i) => new Date(Date.now() + i * 86400000));
@@ -37,23 +40,66 @@ export default function ScheduleVisit() {
   const [created, setCreated] = useState<{ id: number } | null>(null);
   const [run, saving] = useRun();
   const [prefilled, setPrefilled] = useState(false);
+  const staff = isStaff(useAuth().user);
+  const [partner, setPartner] = useState<Reference | null>(null);
+  // Result of POST /api/visits/fetch-lead, per mobile; a 10-digit mobile without a result is being checked.
+  const [lookup, setLookup] = useState<{ mobile: string; status: "found" | "new" | "blocked" | "error"; lead?: FoundLead; message?: string } | null>(null);
+  const mobile = digits(f.mobile);
+  const check = mobile.length !== 10 ? null : lookup?.mobile === mobile ? lookup : { mobile, status: "checking" as const, lead: undefined, message: undefined };
+  const found = check?.status === "found" ? check.lead : undefined;
 
   useEffect(() => {
     if (params.lead_id && !lead) dispatch(fetchLead(Number(params.lead_id)));
   }, [dispatch, params.lead_id, lead]);
+
+  useEffect(() => {
+    if (mobile.length !== 10) return;
+    let alive = true;
+    dispatch(fetchLeadByMobile(mobile))
+      .unwrap()
+      .then(({ lead: existing, blocked }) => {
+        if (!alive) return;
+        if (blocked) return setLookup({ mobile, status: "blocked", message: blocked });
+        setLookup({ mobile, status: existing ? "found" : "new", lead: existing ?? undefined });
+        if (existing) {
+          const name = existing.full_name || [existing.first_name, existing.last_name].filter(Boolean).join(" ");
+          setF((x) => ({ ...x, full_name: name || x.full_name, email: existing.email && !isMasked(existing.email) ? existing.email : "", lead_type: existing.lead_type || x.lead_type, address: existing.address ?? x.address, city: existing.city ?? x.city, state: existing.state ?? x.state }));
+        }
+      })
+      // Lookup failed (e.g. offline): don't block — the server still validates on submit.
+      .catch((e) => alive && setLookup({ mobile, status: "error", message: errorMessage(e) }));
+    return () => {
+      alive = false;
+    };
+  }, [dispatch, mobile]);
   // Opened from a lead: carry over the customer details.
   if (lead && !prefilled) {
     setPrefilled(true);
     setF((x) => ({ ...x, full_name: lead.full_name ?? "", mobile: isMasked(lead.mobile) ? "" : lead.mobile ?? "", email: isMasked(lead.email) ? "" : lead.email ?? "", lead_type: lead.lead_type ?? "warm", project: lead.project_name ?? "", address: lead.address ?? "", city: lead.city ?? "", state: lead.state ?? "" }));
   }
 
-  const projectId = projects.data?.find((p) => p.name === f.project)?.id ?? (projects.data?.length === 1 ? projects.data[0].id : undefined);
+  // Project: picked by name, else the existing lead's project, else the only project.
+  const projectName = f.project || projects.data?.find((p) => p.id === found?.project_id)?.name || (projects.data?.length === 1 ? projects.data[0].name : "");
+  const projectId = projects.data?.find((p) => p.name === projectName)?.id;
   const slot = slots.data?.find((t) => t.id === f.slot);
 
   const submit = async () => {
     try {
       const v = await run<{ id: number }>(
-        createVisit({ full_name: f.full_name.trim(), mobile: digits(f.mobile), email: f.email.trim() || undefined, lead_type: f.lead_type, project_id: projectId!, visit_date: f.visit_date, time_slot_id: f.slot, address: f.address.trim() || undefined, city: f.city.trim() || undefined, state: f.state || undefined, remarks: f.remarks.trim() || undefined }),
+        createVisit({
+          full_name: f.full_name.trim(),
+          mobile,
+          email: found ? undefined : f.email.trim() || undefined,
+          lead_type: f.lead_type,
+          project_id: projectId!,
+          visit_date: f.visit_date,
+          time_slot_id: f.slot,
+          address: f.address.trim() || undefined,
+          city: f.city.trim() || undefined,
+          state: f.state || undefined,
+          remarks: f.remarks.trim() || undefined,
+          partner_id: !staff ? undefined : found ? found.partner_id ?? undefined : partner?.id,
+        }),
       );
       setCreated(v);
     } catch (e) {
@@ -80,31 +126,48 @@ export default function ScheduleVisit() {
       steps={[
         {
           key: "visitor", title: "Visitor", subtitle: params.lead_id && lead ? `From lead: ${lead.full_name}` : "Who is visiting the project?",
-          validate: () => (!f.full_name.trim() ? "Complete name is required" : digits(f.mobile).length !== 10 ? "Enter a valid 10-digit mobile number" : f.email && !/^\S+@\S+\.\S+$/.test(f.email) ? "Enter a valid email address" : undefined),
-          summary: () => [{ label: "Name", value: f.full_name }, { label: "Mobile", value: f.mobile }, { label: "Email", value: f.email }, { label: "Lead type", value: TEMPS.find((t) => t.k === f.lead_type)?.label }],
+          validate: () =>
+            mobile.length !== 10 ? "Enter a valid 10-digit mobile number"
+              : check?.status === "checking" ? "Checking the mobile number…"
+              : check?.status === "blocked" ? check.message ?? "This mobile number belongs to another partner"
+              : !f.full_name.trim() ? "Complete name is required"
+              : !found && f.email && !/^\S+@\S+\.\S+$/.test(f.email) ? "Enter a valid email address" : undefined,
+          summary: () => [
+            { label: "Name", value: f.full_name },
+            { label: "Mobile", value: f.mobile },
+            { label: "Email", value: found ? found.email ?? undefined : f.email },
+            { label: "Lead type", value: TEMPS.find((t) => t.k === f.lead_type)?.label },
+            ...(staff ? [{ label: "Lead for", value: found ? (found.partner_id ? "Existing lead's partner" : "Direct") : partner?.name ?? "Direct (no partner)" }] : []),
+          ],
           render: () => (
             <View>
-              <Field label="Complete name" placeholder="Enter complete name" value={f.full_name} onChangeText={set("full_name")} icon="person-outline" testID="visit-name-input" />
-              <Field label="Mobile number" placeholder="10-digit mobile number" value={f.mobile} onChangeText={(v) => set("mobile")(digits(v).slice(0, 10))} keyboardType="number-pad" maxLength={10} icon="call-outline" testID="visit-mobile-input" />
-              <Field label="Email address" placeholder="Enter email address" value={f.email} onChangeText={set("email")} keyboardType="email-address" autoCapitalize="none" icon="mail-outline" testID="visit-email-input" />
-              <View style={{ flexDirection: "row", gap: 10 }}>
+              <Field label="Mobile number" placeholder="10-digit mobile number" value={f.mobile} onChangeText={(v) => set("mobile")(digits(v).slice(0, 10))} keyboardType="number-pad" maxLength={10} icon="call-outline" error={check?.status === "blocked" ? check.message : undefined} testID="visit-mobile-input" />
+              {check?.status === "checking" ? <Text style={[styles.note, { marginTop: -8 }]}>Checking for an existing lead…</Text> : null}
+              {found ? <Text style={[styles.note, { marginTop: -8 }]} testID="visit-existing-lead">Existing lead found — details filled in from it.</Text> : null}
+              <Field label="Complete name" placeholder="Enter complete name" value={f.full_name} onChangeText={set("full_name")} editable={!found} icon="person-outline" testID="visit-name-input" />
+              <Field label="Email address" placeholder="Enter email address" value={f.email} onChangeText={set("email")} editable={!found} keyboardType="email-address" autoCapitalize="none" icon="mail-outline" testID="visit-email-input" />
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: staff ? spacing.lg : 0 }}>
                 {TEMPS.map((t) => <OptionTile key={t.k} label={t.label} icon={t.i} selected={f.lead_type === t.k} onPress={() => set("lead_type")(t.k)} testID={`visit-temp-${t.k}`} style={{ flex: 1 }} />)}
               </View>
+              {staff ? (
+                found ? (
+                  <Text style={styles.note} testID="visit-lead-for-locked">Lead For stays as on the existing lead.</Text>
+                ) : (
+                  <ReferenceChooser value={partner} onChange={setPartner} noneLabel="Direct (no partner)" label="Lead for" testID="visit-partner" />
+                )
+              ) : null}
             </View>
           ),
         },
         {
           key: "address", title: "Project & Address", subtitle: "Which project, and where is the visitor coming from?",
           validate: () => (!projectId ? "Select the project" : undefined),
-          summary: () => [{ label: "Project", value: f.project || projects.data?.[0]?.name }, { label: "Address", value: [f.address, f.city, f.state].filter(Boolean).join(", ") }],
+          summary: () => [{ label: "Project", value: projectName }, { label: "Address", value: [f.address, f.city, f.state].filter(Boolean).join(", ") }],
           render: () => (
             <View>
-              <Select label="Project" value={f.project || (projects.data?.length === 1 ? projects.data[0].name : "")} options={(projects.data ?? []).map((p) => p.name)} onChange={set("project")} placeholder={projects.status === "loading" ? "Loading…" : "Select project"} icon="home-outline" testID="visit-project-select" />
+              <Select label="Project" value={projectName} options={(projects.data ?? []).map((p) => p.name)} onChange={set("project")} placeholder={projects.status === "loading" ? "Loading…" : "Select project"} icon="home-outline" testID="visit-project-select" />
               <Field label="Address" placeholder="Enter complete address" value={f.address} onChangeText={set("address")} icon="location-outline" testID="visit-address-input" />
-              <View style={{ flexDirection: "row", gap: 10 }}>
-                <Field label="City" placeholder="Enter city" value={f.city} onChangeText={set("city")} containerStyle={{ flex: 1 }} testID="visit-city-input" />
-                <View style={{ flex: 1 }}><Select label="State" value={f.state} options={STATES.includes(f.state) || !f.state ? STATES : [f.state, ...STATES]} onChange={set("state")} placeholder="Select state" testID="visit-state-select" /></View>
-              </View>
+              <StateCityFields state={f.state} city={f.city} onChange={(v) => setF((x) => ({ ...x, ...v }))} testIDPrefix="visit" />
             </View>
           ),
         },
@@ -154,6 +217,7 @@ export default function ScheduleVisit() {
 
 const useStyles = makeStyles((colors) => ({
   label: { fontFamily: fonts.semibold, fontSize: 11, letterSpacing: 1.4, color: colors.onSurfaceTertiary, marginBottom: 10 },
+  note: { fontFamily: fonts.body, fontSize: 12, color: colors.muted, marginBottom: spacing.md },
   day: { width: 60, height: 70, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", gap: 4 },
   daySel: { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary },
   dayWd: { fontFamily: fonts.semibold, fontSize: 10, letterSpacing: 1, color: colors.muted },

@@ -5,11 +5,11 @@ import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboa
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { PARTNER_TYPES, PartnerType } from "@/src/brand";
-import { Button, ChoiceChips, Field, Header, OptionTile, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
+import { BusinessTypePicker } from "@/src/components/partners";
+import { Button, Field, Header, OptionTile, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
 import { useAppDispatch, useAppSelector } from "@/src/store";
 import { updateDraft } from "@/src/store/authSlice";
 import { spacing } from "@/src/theme";
-import { BUSINESS_TYPES } from "@/src/types";
 
 // Screen 4 · Partner registration · Step 1 (partner type & basic information).
 // Answers are kept in the Redux draft and submitted together at step 4.
@@ -53,7 +53,7 @@ export default function ProfileType() {
           ))}
         </View>
 
-        {isCp ? <ChoiceChips label="Type of business" value={BUSINESS_TYPES[business]} options={Object.values(BUSINESS_TYPES)} onChange={(v) => setBusiness(Object.keys(BUSINESS_TYPES).find((k) => BUSINESS_TYPES[k] === v) ?? "")} error={errors.business} testID="business-type" /> : null}
+        {isCp ? <BusinessTypePicker value={business} onChange={setBusiness} error={errors.business} testID="business-type" /> : null}
 
         <SectionLabel>Basic Information</SectionLabel>
         <View style={{ flexDirection: "row", gap: 10 }}>

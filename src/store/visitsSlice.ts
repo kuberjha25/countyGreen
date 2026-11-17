@@ -1,8 +1,8 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
-import { request } from "@/src/api";
+import { ApiError, request } from "@/src/api";
 import { addListCases, emptyList, Entry, ListArgs, ListState, cleanParams } from "@/src/store/list";
-import type { Envelope, Paginated, VisitDetail, VisitRow } from "@/src/types";
+import type { Envelope, FoundLead, Paginated, VisitDetail, VisitRow } from "@/src/types";
 
 type VisitsState = { list: ListState<VisitRow>; byId: Record<number, Entry<VisitDetail>> };
 const initialState: VisitsState = { list: emptyList<VisitRow>(), byId: {} };
@@ -11,7 +11,19 @@ const initialState: VisitsState = { list: emptyList<VisitRow>(), byId: {} };
 export const fetchVisits = createAsyncThunk("visits/list", async ({ params, page = 1 }: ListArgs) => (await request<Envelope<Paginated<VisitRow>>>("/visits", { query: { ...cleanParams(params), page } })).data);
 export const fetchVisit = createAsyncThunk("visits/detail", async (id: number) => (await request<Envelope<VisitDetail>>(`/visits/${id}`)).data);
 
-export type VisitInput = { full_name: string; mobile: string; project_id: number; lead_type: string; visit_date: string; time_slot_id: number; email?: string; address?: string; city?: string; state?: string; remarks?: string };
+// partner_id = "Lead For" (backoffice only). Leave email out when fetch-lead found an existing lead.
+export type VisitInput = { full_name: string; mobile: string; project_id: number; lead_type: string; visit_date: string; time_slot_id: number; email?: string; address?: string; city?: string; state?: string; remarks?: string; partner_id?: number };
+
+// POST /api/visits/fetch-lead — existing lead for this mobile (auto-fill), null (new customer),
+// or HTTP 403 when the number belongs to another partner (thrown; submit must be blocked).
+export const fetchLeadByMobile = createAsyncThunk("visits/fetchLead", async (mobile: string): Promise<{ lead: FoundLead | null; blocked?: string }> => {
+  try {
+    return { lead: (await request<Envelope<FoundLead | null>>("/visits/fetch-lead", { method: "POST", body: { mobile } })).data ?? null };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 403) return { lead: null, blocked: e.message };
+    throw e;
+  }
+});
 // Creates (or reuses, by mobile) a lead and schedules the visit.
 export const createVisit = createAsyncThunk("visits/create", async (body: VisitInput) => (await request<Envelope<{ id: number; lead_id?: number }>>("/visits", { method: "POST", body })).data);
 export const attendVisit = createAsyncThunk("visits/attend", async ({ id, remarks }: { id: number; remarks: string }) => (await request<Envelope<unknown>>(`/visits/${id}/attend`, { method: "POST", body: { remarks } })).data);

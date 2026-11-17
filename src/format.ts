@@ -75,6 +75,28 @@ export function daysUntil(d?: string): number | null {
   return Math.round((next.getTime() - today.getTime()) / 86400000);
 }
 
+// Partner-request dates come as "YYYY-MM-DD HH:mm:ss" in UTC → local "05 Oct 2026 · 03:30 pm".
+export function fmtUtc(d?: string | null) {
+  if (!d) return "";
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(d) ? `${d.replace(" ", "T")}Z` : d;
+  return fmtDateTime(iso);
+}
+
+// Event dates: "05 Oct 2026 – 07 Oct 2026", or one date.
+export function eventWhen(e: { start_date?: string | null; end_date?: string | null }) {
+  const from = fmtDate(e.start_date ?? undefined);
+  const to = fmtDate(e.end_date ?? undefined);
+  return from && to && from !== to ? `${from} – ${to}` : from || to;
+}
+
+// "DD-MM-YYYY" (typed in filters) → "YYYY-MM-DD", or "" when invalid.
+export function dmyToIso(v: string) {
+  const m = v.trim().match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (!m) return "";
+  const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  return d.getDate() === Number(m[1]) && d.getMonth() === Number(m[2]) - 1 ? isoDay(d) : "";
+}
+
 // "2026-10-26" — the date format the API expects.
 export function isoDay(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -87,13 +109,14 @@ export function toIsoDay(v?: string | null) {
   return d ? isoDay(d) : "";
 }
 
-// Admin-entered rich text (HTML) → plain paragraphs for <Text>.
-export function plainText(html?: string | null) {
+// Admin-entered rich text (HTML) → plain paragraphs for <Text>. keepLinks leaves <a href> tags
+// in place for <LinkifiedText>.
+export function plainText(html?: string | null, { keepLinks = false }: { keepLinks?: boolean } = {}) {
   return (html ?? "")
     .replace(/<\s*br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|h[1-6])>/gi, "\n\n")
     .replace(/<li[^>]*>/gi, "• ")
-    .replace(/<[^>]+>/g, "")
+    .replace(keepLinks ? /<(?!\/?a[\s>])[^>]+>/gi : /<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")

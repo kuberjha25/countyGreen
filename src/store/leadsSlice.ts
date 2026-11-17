@@ -36,8 +36,15 @@ export type LeadInput = {
 export const createLead = createAsyncThunk("leads/create", async (body: LeadInput) => (await request<Envelope<LeadDetail>>("/leads", { method: "POST", body })).data);
 export const updateLead = createAsyncThunk("leads/update", async ({ id, body }: { id: number; body: Partial<LeadInput> }) => (await request<Envelope<LeadDetail>>(`/leads/${id}`, { method: "PUT", body })).data);
 
-export type FollowupInput = { followup_date: string; remarks: string; followup_time?: string; activity?: string; status?: string; lead_type?: string };
+// Status changes go through updateLead ({ status, remarks } — remarks required, min 3 chars).
+
+// Follow-up: never send status (the server moves a "new" lead to follow_up); lead_type only if changed.
+export type FollowupInput = { followup_date: string; remarks: string; followup_time?: string; activity?: string; lead_type?: string };
 export const addFollowup = createAsyncThunk("leads/followup", async ({ id, body }: { id: number; body: FollowupInput }) => (await request<Envelope<unknown>>(`/leads/${id}/followups`, { method: "POST", body })).data);
+// followupId = history[].id of a type "task" entry.
+export const completeFollowup = createAsyncThunk("leads/completeFollowup", async ({ id, followupId, remarks }: { id: number; followupId: number; remarks: string }) =>
+  request<{ message: string }>(`/leads/${id}/followups/${followupId}/complete`, { method: "POST", body: { completion_remarks: remarks } }),
+);
 
 const slice = createSlice({
   name: "leads",
@@ -61,7 +68,8 @@ const slice = createSlice({
     };
     b.addCase(createLead.fulfilled, (s) => stale(s))
       .addCase(updateLead.fulfilled, (s, a) => stale(s, a.meta.arg.id))
-      .addCase(addFollowup.fulfilled, (s, a) => stale(s, a.meta.arg.id));
+      .addCase(addFollowup.fulfilled, (s, a) => stale(s, a.meta.arg.id))
+      .addCase(completeFollowup.fulfilled, (s, a) => stale(s, a.meta.arg.id));
   },
 });
 

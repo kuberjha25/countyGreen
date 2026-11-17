@@ -7,16 +7,17 @@ import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboa
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { appendFile, errorMessage, mimeOf, lookupPincode, PickedFile } from "@/src/api";
-import { PARTNER_TYPES, STATES } from "@/src/brand";
-import { ReferenceChooser } from "@/src/components/partners";
-import { Badge, Button, ChoiceChips, Field, Header, OptionTile, ScreenTitle, SectionLabel, Select, useScreenStyles } from "@/src/components/ui";
+import { PARTNER_TYPES } from "@/src/brand";
+import { StateCityFields, useMatchState } from "@/src/components/location";
+import { BusinessTypePicker, ReferenceChooser } from "@/src/components/partners";
+import { Badge, Button, ChoiceChips, Field, Header, OptionTile, ScreenTitle, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { digits } from "@/src/format";
 import { useCpDocuments } from "@/src/lookups";
 import { adminRegister } from "@/src/store/registrationsSlice";
 import { useRun } from "@/src/store/useRun";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
-import { ApiPartnerType, BUSINESS_TYPES, Reference } from "@/src/types";
+import { ApiPartnerType, Reference } from "@/src/types";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const EMPTY = { first_name: "", last_name: "", mobile: "", email: "", address: "", pincode: "", city: "", state: "", company_name: "", business_type: "", facebook_link: "", instagram_link: "", youtube_link: "" };
@@ -30,9 +31,10 @@ export default function NewRegistration() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
-  const docs = useCpDocuments();
+  const matchState = useMatchState();
   const [type, setType] = useState<ApiPartnerType | "">("");
   const [f, setF] = useState(EMPTY);
+  const docs = useCpDocuments(type === "channel_partner" ? f.business_type : undefined);
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   const [knows, setKnows] = useState(false);
   const [employee, setEmployee] = useState<Reference | null>(null);
@@ -46,7 +48,7 @@ export default function NewRegistration() {
     const pin = digits(v).slice(0, 6);
     set("pincode")(pin);
     const r = await lookupPincode(pin);
-    if (r) setF((x) => ({ ...x, city: r.city, state: r.state }));
+    if (r) setF((x) => ({ ...x, city: r.city, state: matchState(r.state) }));
   };
 
   const pick = async (key: string) => {
@@ -71,6 +73,7 @@ export default function NewRegistration() {
     if (knows && !employee) e.employee = "Select the employee";
     const missing = isCp ? (docs.data ?? []).filter((d) => d.is_mandatory && !files[d.field_key]) : [];
     if (missing.length) e.docs = `Please upload: ${missing.map((d) => d.name).join(", ")}`;
+    if (isCp && f.business_type && docs.status !== "succeeded") e.docs = docs.status === "failed" ? docs.error ?? "Could not load the document list" : "Loading the document list…";
     setErrors(e);
     if (Object.keys(e).length) return toast.show(e.type ?? e.docs ?? "Please correct the highlighted fields", "error");
 
@@ -118,17 +121,14 @@ export default function NewRegistration() {
 
         <SectionLabel>Address</SectionLabel>
         <Field label="Address" placeholder="Street / Locality" value={f.address} onChangeText={set("address")} icon="location-outline" testID="reg-address" />
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <Field label="PIN code" placeholder="160001" value={f.pincode} onChangeText={onPincode} keyboardType="number-pad" maxLength={6} containerStyle={{ flex: 1 }} testID="reg-pincode" />
-          <Field label="City" placeholder="City" value={f.city} onChangeText={set("city")} containerStyle={{ flex: 1 }} testID="reg-city" />
-        </View>
-        <Select label="State" value={f.state} options={STATES.includes(f.state) || !f.state ? STATES : [f.state, ...STATES]} onChange={set("state")} placeholder="Select state" testID="reg-state" />
+        <Field label="PIN code" placeholder="160001" value={f.pincode} onChangeText={onPincode} keyboardType="number-pad" maxLength={6} testID="reg-pincode" />
+        <StateCityFields state={f.state} city={f.city} onChange={(v) => setF((x) => ({ ...x, ...v }))} testIDPrefix="reg" />
 
         {isCp ? (
           <>
             <SectionLabel>Business Details</SectionLabel>
             <Field label="Company / Firm" placeholder="Company Name" value={f.company_name} onChangeText={set("company_name")} icon="business-outline" error={errors.company_name} testID="reg-company" />
-            <ChoiceChips label="Type of business" value={BUSINESS_TYPES[f.business_type]} options={Object.values(BUSINESS_TYPES)} onChange={(v) => set("business_type")(Object.keys(BUSINESS_TYPES).find((k) => BUSINESS_TYPES[k] === v) ?? "")} error={errors.business_type} testID="reg-business-type" />
+            <BusinessTypePicker value={f.business_type} onChange={set("business_type")} error={errors.business_type} testID="reg-business-type" />
           </>
         ) : null}
 
