@@ -1,8 +1,8 @@
-import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { createAsyncThunk, createSlice, miniSerializeError } from "@reduxjs/toolkit";
 
-import { request } from "@/src/api";
+import { ApiError, request } from "@/src/api";
 import { addListCases, emptyList, Entry, ListArgs, ListState, cleanParams } from "@/src/store/list";
-import type { Envelope, LeadDetail, LeadRow, Paginated } from "@/src/types";
+import type { Envelope, LeadDetail, LeadRow, LeadSettableStatus, Paginated } from "@/src/types";
 
 // Leads are scoped by the server to the caller's access level (partners see only theirs).
 type LeadsState = { list: ListState<LeadRow>; byId: Record<number, Entry<LeadDetail>> };
@@ -31,12 +31,22 @@ export type LeadInput = {
   state?: string;
   city?: string;
   remarks?: string;
-  status?: string;
+  aadhaar_last_four: string; // last 4 digits of the customer's Aadhaar — required on County Green (create & update)
 };
-export const createLead = createAsyncThunk("leads/create", async (body: LeadInput) => (await request<Envelope<LeadDetail>>("/leads", { method: "POST", body })).data);
-export const updateLead = createAsyncThunk("leads/update", async ({ id, body }: { id: number; body: Partial<LeadInput> }) => (await request<Envelope<LeadDetail>>(`/leads/${id}`, { method: "PUT", body })).data);
+// Keep the API's per-field validation errors (422 `errors`) on the rejected action, so
+// forms get them from .unwrap() — the default serializer keeps only name / message / stack / code.
+const keepFieldErrors = { serializeError: (e: unknown) => ({ ...miniSerializeError(e), errors: e instanceof ApiError ? e.errors : undefined }) };
 
-// Status changes go through updateLead ({ status, remarks } — remarks required, min 3 chars).
+export const createLead = createAsyncThunk("leads/create", async (body: LeadInput) => (await request<Envelope<LeadDetail>>("/leads", { method: "POST", body })).data, keepFieldErrors);
+// PUT /api/leads/{id} is for lead details only — never send status here (use updateLeadStatus).
+export const updateLead = createAsyncThunk("leads/update", async ({ id, body }: { id: number; body: Partial<LeadInput> }) => (await request<Envelope<LeadDetail>>(`/leads/${id}`, { method: "PUT", body })).data, keepFieldErrors);
+
+// PATCH /api/leads/{id}/status { status, remarks } — remarks required (min 3 characters).
+// The response carries only { id, status, remarks }; it is merged into the cached detail and list row.
+export type LeadStatusResult = { id: number; status: string; remarks?: string | null };
+export const updateLeadStatus = createAsyncThunk("leads/updateStatus", async ({ id, status, remarks }: { id: number; status: LeadSettableStatus; remarks: string }) =>
+  (await request<Envelope<LeadStatusResult>>(`/leads/${id}/status`, { method: "PATCH", body: { status, remarks } })).data,
+);
 
 // Follow-up: never send status (the server moves a "new" lead to follow_up); lead_type only if changed.
 export type FollowupInput = { followup_date: string; remarks: string; followup_time?: string; activity?: string; lead_type?: string };
@@ -69,7 +79,19 @@ const slice = createSlice({
     b.addCase(createLead.fulfilled, (s) => stale(s))
       .addCase(updateLead.fulfilled, (s, a) => stale(s, a.meta.arg.id))
       .addCase(addFollowup.fulfilled, (s, a) => stale(s, a.meta.arg.id))
-      .addCase(completeFollowup.fulfilled, (s, a) => stale(s, a.meta.arg.id));
+      .addCase(completeFollowup.fulfilled, (s, a) => stale(s, a.meta.arg.id))
+      .addCase(updateLeadStatus.fulfilled, (s, a) => {
+        const id = a.payload?.id ?? a.meta.arg.id;
+        const status = a.payload?.status ?? a.meta.arg.status;
+        const remarks = a.payload?.remarks ?? a.meta.arg.remarks;
+        const detail = s.byId[id]?.data;
+        if (detail) Object.assign(detail, { status, remarks });
+        s.list.items.forEach((row) => {
+          if (row.id === id) row.status = status;
+        });
+        // History gains a status-change entry on the server: refetch the detail in the background.
+        if (s.byId[id]) s.byId[id].status = "idle";
+      });
   },
 });
 

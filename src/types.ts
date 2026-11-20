@@ -51,6 +51,7 @@ export type LeadDetail = LeadRow & {
   address?: string | null;
   city?: string | null;
   state?: string | null;
+  aadhaar_last_four?: string | null;
   history?: LeadHistory[];
 };
 // type "task" = a follow-up (has id; can be marked complete), "log" = a system entry.
@@ -153,7 +154,10 @@ export const LEAD_STATUS_LABEL: Record<string, string> = {
 };
 // List filter: system statuses (set by the server) + the ones staff can set (GET /api/leads/statuses).
 export const LEAD_LIST_STATUSES = ["new", "follow_up", "visit_scheduled", "visit_completed", "contacted", "negotiation", "booked", "converted", "expired", "lost"];
-export const LEAD_TYPES = ["hot", "warm", "cold"] as const;
+// Statuses staff can set (PATCH /api/leads/{id}/status) — fallback when GET /api/leads/statuses fails or is empty.
+export const LEAD_SETTABLE_STATUSES = ["contacted", "negotiation", "booked", "expired", "converted", "lost"] as const;
+export type LeadSettableStatus = (typeof LEAD_SETTABLE_STATUSES)[number];
+export const LEAD_TYPES =["hot", "warm", "cold"] as const;
 export const VISIT_STATUS_LABEL: Record<string, string> = { scheduled: "Scheduled", in_progress: "In Progress", completed: "Completed", cancelled: "Cancelled" };
 export const VISIT_STATUSES = ["scheduled", "in_progress", "completed", "cancelled"];
 export const DATE_FILTERS = { today: "Today", this_week: "This week", this_month: "This month", custom: "Custom" } as const;

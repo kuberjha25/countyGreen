@@ -32,7 +32,7 @@ let onUnauthorized: (() => void) | null = null;
 export const setUnauthorizedHandler = (fn: () => void) => (onUnauthorized = fn);
 
 type Query = Record<string, string | number | boolean | null | undefined>;
-type Options = { method?: "GET" | "POST" | "PUT"; query?: Query; body?: unknown; form?: FormData; auth?: boolean };
+type Options = { method?: "GET" | "POST" | "PUT" | "PATCH"; query?: Query; body?: unknown; form?: FormData; auth?: boolean };
 
 const qs = (query?: Query) => {
   const parts = Object.entries(query ?? {})
@@ -76,14 +76,30 @@ function logFailure(method: string, url: string, started: number, reason: string
   console.warn(`[API] ✖ ${method} ${url} (${Date.now() - started} ms) ${reason}`);
 }
 
+// Multipart uploads go through XMLHttpRequest, not fetch: Expo (SDK 52+) replaces the global fetch
+// with expo/fetch, whose FormData encoder rejects React Native file parts ({ uri, name, type }) with
+// "Unsupported FormDataPart implementation" before anything is sent — on Android and iOS alike.
+// React Native's XMLHttpRequest streams those file parts natively (and on web it sends File parts as usual).
+function sendForm(method: string, url: string, headers: Record<string, string>, form: FormData): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v)); // no Content-Type: XHR adds the multipart boundary
+    xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText ?? "" });
+    xhr.onerror = () => reject(new Error("Network request failed"));
+    xhr.ontimeout = () => reject(new Error("Request timed out"));
+    xhr.send(form);
+  });
+}
+
 export async function request<T = any>(path: string, { method = "GET", query, body, form, auth = true }: Options = {}): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   const token = auth ? await getToken() : null;
   if (token) headers.Authorization = `Bearer ${token}`;
   // GET never carries a body: the hosting firewall answers GET-with-body with an HTML 403.
   let payload: BodyInit | undefined;
-  if (method !== "GET" && form) payload = form; // multipart boundary is set by fetch
-  else if (method !== "GET" && body !== undefined) {
+  const multipart = method !== "GET" && !!form;
+  if (!multipart && method !== "GET" && body !== undefined) {
     headers["Content-Type"] = "application/json";
     payload = JSON.stringify(body);
   }
@@ -91,26 +107,32 @@ export async function request<T = any>(path: string, { method = "GET", query, bo
   const url = `${BASE_URL}/api${path}${qs(query)}`;
   const started = Date.now();
   logRequest(method, url, !!token, form ? formSummary(form) : body);
-  let res: Response;
+  let status: number;
+  let text: string;
   try {
-    res = await fetch(url, { method, headers, body: payload });
+    if (multipart) ({ status, text } = await sendForm(method, url, headers, form!));
+    else {
+      const res = await fetch(url, { method, headers, body: payload });
+      status = res.status;
+      text = await res.text();
+    }
   } catch (e) {
     logFailure(method, url, started, `NETWORK ERROR ${(e as Error)?.message ?? e}`);
-    throw new ApiError(0, "You appear to be offline. Please check your connection.");
+    throw new ApiError(0, multipart ? "The upload could not be sent. Please check your connection and try again." : "You appear to be offline. Please check your connection.");
   }
-  const text = await res.text();
+  const ok = status >= 200 && status < 300;
   let data: any = {};
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    data = { message: res.ok ? "Unexpected response from the server." : `Server error (${res.status}). Please try again.` };
+    data = { message: ok ? "Unexpected response from the server." : status === 413 ? "The file is too large to upload." : `Server error (${status}). Please try again.` };
   }
-  logResponse(method, url, res.status, started, data, text);
+  logResponse(method, url, status, started, data, text);
 
-  if (!res.ok || data?.status === false || data?.success === false) {
-    if (res.status === 401 && token) onUnauthorized?.();
+  if (!ok || data?.status === false || data?.success === false) {
+    if (status === 401 && token) onUnauthorized?.();
     const firstField = data?.errors && Object.values<string[]>(data.errors)[0]?.[0];
-    throw new ApiError(res.status, firstField || data?.message || `Request failed (${res.status})`, data?.errors);
+    throw new ApiError(status, firstField || data?.message || `Request failed (${status})`, data?.errors);
   }
   return data as T;
 }

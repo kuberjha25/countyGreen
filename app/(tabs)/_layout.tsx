@@ -1,24 +1,15 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { Tabs } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
-import { useEffect } from "react";
-import { AppState, Platform } from "react-native";
+import { Platform } from "react-native";
 
 import { TABS } from "@/src/nav";
 import { fonts, useTheme } from "@/src/theme";
-import { promptWhatsNew } from "@/src/whatsNew";
 
 const isIOS26 = Platform.OS === "ios" && parseInt(String(Platform.Version), 10) >= 26;
 
 export default function TabsLayout() {
   const { colors } = useTheme();
-
-  // Signed-in area: tell the user about news / events posted since the last check.
-  useEffect(() => {
-    promptWhatsNew();
-    const sub = AppState.addEventListener("change", (st) => st === "active" && promptWhatsNew());
-    return () => sub.remove();
-  }, []);
 
   if (isIOS26) {
     return (

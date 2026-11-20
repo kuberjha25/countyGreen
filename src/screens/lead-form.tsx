@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
-import { errorMessage } from "@/src/api";
+import { ApiError, errorMessage } from "@/src/api";
 import { StateCityFields } from "@/src/components/location";
 import { ReferenceChooser } from "@/src/components/partners";
 import { ChoiceChips, ErrorState, Field, Header, Loading, OptionTile, Select, useScreenStyles } from "@/src/components/ui";
@@ -16,11 +16,22 @@ import { spacing } from "@/src/theme";
 import { useToast } from "@/src/toast";
 import { isMasked, LeadDetail, Reference } from "@/src/types";
 
+// Aadhaar: only the last 4 digits are collected — required on County Green for create & update.
+const aadhaarError = (v: string) => (!v ? "Aadhaar last 4 digits are required" : !/^\d{4}$/.test(v) ? "Enter exactly 4 digits of the Aadhaar number" : undefined);
+
 const TEMPS = [{ k: "hot", label: "Hot", i: "flame-outline" }, { k: "warm", label: "Warm", i: "sunny-outline" }, { k: "cold", label: "Cold", i: "snow-outline" }] as const;
-type Form = { partner: Reference | null; full_name: string; mobile: string; email: string; lead_type: string; project: string; category: string; budget: string; source: string; address: string; city: string; state: string; remarks: string };
-const EMPTY: Form = { partner: null, full_name: "", mobile: "", email: "", lead_type: "warm", project: "", category: "", budget: "", source: "", address: "", city: "", state: "", remarks: "" };
+type Form = { partner: Reference | null; full_name: string; mobile: string; email: string; aadhaar_last_four: string; lead_type: string; project: string; category: string; budget: string; source: string; address: string; city: string; state: string; remarks: string };
+const EMPTY: Form = { partner: null, full_name: "", mobile: "", email: "", aadhaar_last_four: "", lead_type: "warm", project: "", category: "", budget: "", source: "", address: "", city: "", state: "", remarks: "" };
 
 // Screen 15 · New Lead / Edit Lead (POST / PUT /api/leads) — staff add leads, also on behalf of a partner.
+// API field names per wizard step — a 422 on one of them sends the user back to that step.
+const STEP_FIELDS: Record<string, string[]> = {
+  source: ["partner_id"],
+  customer: ["full_name", "mobile", "email", "aadhaar_last_four", "lead_type"],
+  requirement: ["project_id", "unit_category", "budget"],
+  more: ["source", "address", "city", "state", "remarks"],
+};
+
 export default function LeadFormScreen() {
   const s = useScreenStyles();
   const dispatch = useAppDispatch();
@@ -46,6 +57,7 @@ const fromLead = (l: LeadDetail): Form => ({
   full_name: l.full_name ?? "",
   mobile: isMasked(l.mobile) ? "" : l.mobile ?? "", // masked numbers are left out of the update
   email: isMasked(l.email) ? "" : l.email ?? "",
+  aadhaar_last_four: /^\d{4}$/.test(l.aadhaar_last_four ?? "") ? l.aadhaar_last_four! : "",
   lead_type: l.lead_type ?? "warm",
   project: l.project_name ?? "",
   category: l.unit_category ?? "",
@@ -67,8 +79,20 @@ function LeadForm({ id, lead, initial }: { id?: number; lead?: LeadDetail; initi
   const editing = !!id;
   const [f, setF] = useState<Form>(initial);
   const set = (k: keyof Form) => (v: string) => setF((x) => ({ ...x, [k]: v }));
+  // Like set(), and clears that field's API error once the user edits it.
+  const edit = (k: keyof Form) => (v: string) => {
+    set(k)(v);
+    setApiErrors((e) => {
+      if (!(k in e)) return e;
+      const { [k]: _cleared, ...rest } = e;
+      return rest;
+    });
+  };
   const [done, setDone] = useState<LeadDetail | null>(null);
   const [run, saving] = useRun();
+  // Field errors returned by the API (422 `errors`), shown under the matching input.
+  const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
+  const fieldError = (k: string) => apiErrors[k];
 
   const projectId = projects.data?.find((p) => p.name === f.project)?.id;
   const categoryId = categories.data?.find((c) => c.name === f.category)?.id;
@@ -88,6 +112,7 @@ function LeadForm({ id, lead, initial }: { id?: number; lead?: LeadDetail; initi
       city: f.city.trim() || undefined,
       state: f.state || undefined,
       remarks: f.remarks.trim() || undefined,
+      aadhaar_last_four: f.aadhaar_last_four,
     };
     if (f.mobile) b.mobile = digits(f.mobile);
     if (!editing && f.partner) b.partner_id = f.partner.id;
@@ -95,11 +120,20 @@ function LeadForm({ id, lead, initial }: { id?: number; lead?: LeadDetail; initi
   };
 
   const submit = async () => {
+    setApiErrors({});
     try {
       const l = await run<LeadDetail>(editing ? updateLead({ id: id!, body: body() }) : createLead(body() as LeadInput));
       setDone(l ?? ({ id } as LeadDetail));
     } catch (e) {
       toast.show(errorMessage(e), "error");
+      // The thunks keep ApiError.errors on the serialized error (see keepFieldErrors in leadsSlice).
+      const errors = (e instanceof ApiError ? e.errors : (e as { errors?: Record<string, string[]> } | undefined)?.errors) ?? undefined;
+      if (!errors) return;
+      const flat = Object.fromEntries(Object.entries(errors).map(([k, v]) => [k, Array.isArray(v) ? v[0] : String(v)]));
+      setApiErrors(flat);
+      // Jump back to the first step that has one of the failing fields.
+      const at = steps.findIndex((st) => STEP_FIELDS[st.key]?.some((k) => flat[k]));
+      if (at >= 0) router.setParams({ step: String(at + 1) });
     }
   };
 
@@ -128,13 +162,26 @@ function LeadForm({ id, lead, initial }: { id?: number; lead?: LeadDetail; initi
         !f.full_name.trim() ? "Full name is required"
           : f.mobile && digits(f.mobile).length !== 10 ? "Enter a valid 10-digit mobile number"
           : !f.mobile && !maskedMobile ? "Mobile number is required"
-          : f.email && !/^\S+@\S+\.\S+$/.test(f.email) ? "Enter a valid email address" : undefined,
-      summary: () => [{ label: "Full name", value: f.full_name }, { label: "Mobile", value: f.mobile || lead?.mobile }, { label: "Email", value: f.email }, { label: "Lead type", value: TEMPS.find((t) => t.k === f.lead_type)?.label }],
+          : f.email && !/^\S+@\S+\.\S+$/.test(f.email) ? "Enter a valid email address"
+          : aadhaarError(f.aadhaar_last_four),
+      summary: () => [{ label: "Full name", value: f.full_name }, { label: "Mobile", value: f.mobile || lead?.mobile }, { label: "Email", value: f.email }, { label: "Aadhaar (last 4)", value: f.aadhaar_last_four && `XXXX XXXX ${f.aadhaar_last_four}` }, { label: "Lead type", value: TEMPS.find((t) => t.k === f.lead_type)?.label }],
       render: () => (
         <View>
-          <Field label="Full name" placeholder="Full Name" value={f.full_name} onChangeText={set("full_name")} icon="person-outline" testID="lead-name-input" />
-          <Field label="Mobile number" placeholder={maskedMobile ? `${lead?.mobile} (leave empty to keep)` : "10-digit mobile number"} value={f.mobile} onChangeText={(v) => set("mobile")(digits(v).slice(0, 10))} keyboardType="number-pad" maxLength={10} icon="call-outline" testID="lead-mobile-input" />
-          <Field label="Email address" placeholder="Email Address" value={f.email} onChangeText={set("email")} keyboardType="email-address" autoCapitalize="none" icon="mail-outline" testID="lead-email-input" />
+          <Field label="Full name" placeholder="Full Name" value={f.full_name} onChangeText={edit("full_name")} error={fieldError("full_name")} icon="person-outline" testID="lead-name-input" />
+          <Field label="Mobile number" placeholder={maskedMobile ? `${lead?.mobile} (leave empty to keep)` : "10-digit mobile number"} value={f.mobile} onChangeText={(v) => edit("mobile")(digits(v).slice(0, 10))} error={fieldError("mobile")} keyboardType="number-pad" maxLength={10} icon="call-outline" testID="lead-mobile-input" />
+          <Field label="Email address" placeholder="Email Address" value={f.email} onChangeText={edit("email")} error={fieldError("email")} keyboardType="email-address" autoCapitalize="none" icon="mail-outline" testID="lead-email-input" />
+          <Field
+            label="Aadhaar number (last 4 digits)"
+            placeholder="e.g. 1234"
+            value={f.aadhaar_last_four}
+            onChangeText={(v) => edit("aadhaar_last_four")(digits(v).slice(0, 4))}
+            error={fieldError("aadhaar_last_four") ?? (f.aadhaar_last_four.length > 0 && f.aadhaar_last_four.length < 4 ? "Enter exactly 4 digits" : undefined)}
+            hint="Only the last 4 digits of the customer's Aadhaar"
+            keyboardType="number-pad"
+            maxLength={4}
+            icon="card-outline"
+            testID="lead-aadhaar-input"
+          />
           <View style={{ flexDirection: "row", gap: 10, marginBottom: spacing.lg }}>
             {TEMPS.map((t) => <OptionTile key={t.k} label={t.label} icon={t.i} selected={f.lead_type === t.k} onPress={() => set("lead_type")(t.k)} testID={`lead-temp-${t.k}`} style={{ flex: 1 }} />)}
           </View>

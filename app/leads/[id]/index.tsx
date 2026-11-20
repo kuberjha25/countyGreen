@@ -11,12 +11,12 @@ import { Avatar, Badge, BottomNav, BottomSheet, Button, Card, ChoiceChips, COMIN
 import { fmtDate } from "@/src/format";
 import { useLeadStatuses } from "@/src/lookups";
 import { useAppDispatch, useAppSelector } from "@/src/store";
-import { completeFollowup, fetchLead, updateLead } from "@/src/store/leadsSlice";
+import { completeFollowup, fetchLead, updateLeadStatus } from "@/src/store/leadsSlice";
 import { fetchLeadStatuses } from "@/src/store/lookupsSlice";
 import { useRun } from "@/src/store/useRun";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
-import { isMasked, label, LEAD_STATUS_LABEL } from "@/src/types";
+import { isMasked, label, LEAD_SETTABLE_STATUSES, LEAD_STATUS_LABEL, LeadSettableStatus } from "@/src/types";
 
 const rupees = (v?: string | null) => (v && /^\d+(\.\d+)?$/.test(v) ? `₹ ${Number(v).toLocaleString("en-IN")}` : v ?? undefined);
 
@@ -43,18 +43,24 @@ export default function LeadDetail() {
   const statuses = useLeadStatuses();
   const [run, saving] = useRun();
   const [statusOpen, setStatusOpen] = useState(false);
-  const [newStatus, setNewStatus] = useState("");
+  const [newStatus, setNewStatus] = useState<LeadSettableStatus | "">("");
   const [statusRemarks, setStatusRemarks] = useState("");
   const [completing, setCompleting] = useState<number | null>(null);
   const [doneRemarks, setDoneRemarks] = useState("");
   const [sheetErr, setSheetErr] = useState<string | undefined>();
 
-  // PUT /api/leads/{id} { status, remarks } — remarks required (min 3 characters).
+  // Options from GET /api/leads/statuses ({ id: slug, name }), limited to what PATCH accepts;
+  // the fixed list is the fallback while it loads or if it fails / comes back empty.
+  const settable = (statuses.data ?? []).filter((o): o is { id: LeadSettableStatus; name: string } => (LEAD_SETTABLE_STATUSES as readonly string[]).includes(String(o.id)));
+  const statusOptions = settable.length ? settable : LEAD_SETTABLE_STATUSES.map((k) => ({ id: k, name: label(LEAD_STATUS_LABEL, k) }));
+  const remarksTooShort = statusRemarks.trim().length < 3;
+
+  // PATCH /api/leads/{id}/status { status, remarks } — remarks required (min 3 characters).
   const saveStatus = async () => {
     if (!newStatus) return setSheetErr("Select the new status");
-    if (statusRemarks.trim().length < 3) return setSheetErr("Add remarks (at least 3 characters)");
+    if (remarksTooShort) return setSheetErr("Remarks must be at least 3 characters");
     try {
-      await run(updateLead({ id: Number(id), body: { status: newStatus, remarks: statusRemarks.trim() } }));
+      await run(updateLeadStatus({ id: Number(id), status: newStatus, remarks: statusRemarks.trim() }));
       setStatusOpen(false);
       toast.show("Lead status updated", "success");
     } catch (e) {
@@ -183,8 +189,8 @@ export default function LeadDetail() {
 
           <BottomSheet visible={statusOpen} onClose={() => setStatusOpen(false)} title="Update status" subtitle={`Currently ${label(LEAD_STATUS_LABEL, l.status)}`} testID="lead-status-sheet">
             {statuses.status === "failed" ? <ErrorState message={statuses.error ?? "Could not load statuses"} onRetry={() => dispatch(fetchLeadStatuses())} /> : null}
-            <ChoiceChips label="New status" value={statuses.data?.find((o) => String(o.id) === newStatus)?.name} options={(statuses.data ?? []).map((o) => o.name)} onChange={(name) => setNewStatus(String(statuses.data?.find((o) => o.name === name)?.id ?? ""))} testID="lead-status-options" />
-            <Field label="Remarks" placeholder="Why is the status changing?" value={statusRemarks} onChangeText={setStatusRemarks} multiline maxLength={500} error={sheetErr} testID="lead-status-remarks" />
+            <ChoiceChips label="New status" value={statusOptions.find((o) => o.id === newStatus)?.name} options={statusOptions.map((o) => o.name)} onChange={(name) => { setSheetErr(undefined); setNewStatus(statusOptions.find((o) => o.name === name)?.id ?? ""); }} testID="lead-status-options" />
+            <Field label="Remarks" placeholder="Why is the status changing? (min 3 characters)" value={statusRemarks} onChangeText={(v) => { setSheetErr(undefined); setStatusRemarks(v); }} multiline maxLength={500} error={sheetErr} testID="lead-status-remarks" />
             <Button label="Save status" variant="gold" onPress={saveStatus} loading={saving} testID="lead-status-save" />
             <Button label="Cancel" variant="ghost" small onPress={() => setStatusOpen(false)} style={{ marginTop: 8 }} testID="lead-status-cancel" />
           </BottomSheet>
