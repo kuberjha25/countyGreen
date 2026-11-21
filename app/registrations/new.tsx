@@ -6,13 +6,15 @@ import { Pressable, Text, View } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { appendFile, errorMessage, mimeOf, lookupPincode, PickedFile } from "@/src/api";
+import { appendFile, errorMessage, mimeOf, PickedFile } from "@/src/api";
 import { PARTNER_TYPES } from "@/src/brand";
-import { StateCityFields, useMatchState } from "@/src/components/location";
+import { PinCodeField, StateCityFields, usePincodeCheck } from "@/src/components/location";
 import { BusinessTypePicker, ReferenceChooser } from "@/src/components/partners";
 import { Badge, Button, ChoiceChips, Field, Header, OptionTile, ScreenTitle, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { digits } from "@/src/format";
 import { useAllCpDocuments, useCpDocuments } from "@/src/lookups";
+import { knownDocsFrom, readRegistrationErrors, RequiredDocs } from "@/src/registration";
+import { useAppSelector } from "@/src/store";
 import { adminRegister } from "@/src/store/registrationsSlice";
 import { useRun } from "@/src/store/useRun";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
@@ -31,7 +33,6 @@ export default function NewRegistration() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
-  const matchState = useMatchState();
   const [type, setType] = useState<ApiPartnerType | "">("");
   const [f, setF] = useState(EMPTY);
   const docs = useCpDocuments(type === "channel_partner" ? f.business_type : undefined);
@@ -45,18 +46,19 @@ export default function NewRegistration() {
   // Every type's documents are fetched up front so the upload list (optional ones too) shows as
   // soon as Channel Partner is picked; once a business type is chosen, only that type's list.
   const allDocs = useAllCpDocuments(isCp);
-  const docList: (CpDocument & { requiredFor?: string[] })[] = f.business_type ? docs.data ?? [] : allDocs.data;
-  const docRequired = (d: CpDocument & { requiredFor?: string[] }) => (f.business_type ? d.is_mandatory : !!d.requiredFor?.length);
-  const docBadge = (d: CpDocument & { requiredFor?: string[] }) =>
-    f.business_type ? (d.is_mandatory ? "Required" : "Optional") : d.requiredFor?.length ? `Required for ${d.requiredFor.join(", ")}` : "Optional";
+  // All documents are Optional; only those the registration API asked for (a 422 on submit) are
+  // Required — GET /cp-documents' is_mandatory isn't reliable. The API's answer is read fresh each submit.
+  const [required, setRequired] = useState<RequiredDocs>({});
+  const cpDocuments = useAppSelector((st) => st.lookups.cpDocuments);
+  const baseDocs: CpDocument[] = f.business_type ? docs.data ?? [] : allDocs.data;
+  const docList: CpDocument[] = [
+    ...baseDocs,
+    ...Object.entries(required).filter(([k]) => !baseDocs.some((d) => d.field_key === k)).map(([k, r]) => ({ id: -1, field_key: k, name: r.name, is_mandatory: true })),
+  ];
   const isInfluencer = type === "influencer";
 
-  const onPincode = async (v: string) => {
-    const pin = digits(v).slice(0, 6);
-    set("pincode")(pin);
-    const r = await lookupPincode(pin);
-    if (r) setF((x) => ({ ...x, city: r.city, state: matchState(r.state) }));
-  };
+  // PIN checked against India Post and the chosen state / city; fills them in while both are empty.
+  const pinCheck = usePincodeCheck(f.pincode, f.state, f.city, (v) => setF((x) => (x.state || x.city ? x : { ...x, ...v })));
 
   const pick = async (key: string) => {
     const r = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "image/jpeg", "image/png"], copyToCacheDirectory: true });
@@ -78,9 +80,10 @@ export default function NewRegistration() {
     if (isCp && !f.company_name.trim()) e.company_name = "Company / firm name is required";
     if (isCp && !f.business_type) e.business_type = "Select the type of business";
     if (knows && !employee) e.employee = "Select the employee";
-    const missing = isCp ? (docs.data ?? []).filter((d) => d.is_mandatory && !files[d.field_key]) : [];
+    if (pinCheck.error) e.pincode = pinCheck.error;
+    const missing = isCp ? docList.filter((d) => required[d.field_key] && !files[d.field_key]) : [];
     if (missing.length) e.docs = `Please upload: ${missing.map((d) => d.name).join(", ")}`;
-    if (isCp && f.business_type && docs.status !== "succeeded") e.docs = docs.status === "failed" ? docs.error ?? "Could not load the document list" : "Loading the document list…";
+    if (isCp && f.business_type && docs.status === "loading") e.docs = "Loading the document list…";
     setErrors(e);
     if (Object.keys(e).length) return toast.show(e.type ?? e.docs ?? "Please correct the highlighted fields", "error");
 
@@ -93,7 +96,7 @@ export default function NewRegistration() {
     if (isCp) {
       const form = new FormData();
       Object.entries(values).forEach(([k, v]) => form.append(k, v));
-      (docs.data ?? []).forEach((d) => files[d.field_key] && appendFile(form, `documents[${d.field_key}]`, files[d.field_key]));
+      docList.forEach((d) => files[d.field_key] && appendFile(form, `documents[${d.field_key}]`, files[d.field_key]));
       payload = form;
     }
     try {
@@ -102,6 +105,10 @@ export default function NewRegistration() {
       if (r.requires_otp) router.replace({ pathname: "/registrations/verify" as any, params: { mobile: r.mobile ?? values.mobile } });
       else router.replace("/registrations");
     } catch (err) {
+      const { docs: asked, others } = readRegistrationErrors(err, [...docList, ...knownDocsFrom(cpDocuments)]);
+      if (Object.keys(asked).length) setRequired(asked);
+      if (others.length) return toast.show(others[0].message, "error");
+      if (Object.keys(asked).length) return toast.show("Upload the documents marked Required, then submit again", "info");
       toast.show(errorMessage(err), "error");
     }
   };
@@ -128,8 +135,8 @@ export default function NewRegistration() {
 
         <SectionLabel>Address</SectionLabel>
         <Field label="Address" placeholder="Street / Locality" value={f.address} onChangeText={set("address")} icon="location-outline" testID="reg-address" />
-        <Field label="PIN code" placeholder="160001" value={f.pincode} onChangeText={onPincode} keyboardType="number-pad" maxLength={6} testID="reg-pincode" />
         <StateCityFields state={f.state} city={f.city} onChange={(v) => setF((x) => ({ ...x, ...v }))} testIDPrefix="reg" />
+        <PinCodeField value={f.pincode} onChange={set("pincode")} check={{ ...pinCheck, error: pinCheck.error ?? errors.pincode }} onUseSuggestion={(v) => setF((x) => ({ ...x, ...v }))} testID="reg-pincode" />
 
         {isCp ? (
           <>
@@ -155,20 +162,19 @@ export default function NewRegistration() {
         {isCp && (docList.length || allDocs.loading || (f.business_type && docs.status === "loading")) ? (
           <>
             <SectionLabel>Documents</SectionLabel>
-            {!f.business_type && docList.length ? <Text style={[s.meta, { marginBottom: 10 }]}>Select the type of business to confirm which documents are required.</Text> : null}
             {!docList.length ? <Text style={[s.meta, { marginBottom: 10 }]}>Loading the document list…</Text> : null}
             <View style={{ gap: 10 }}>
               {docList.map((d) => {
                 const file = files[d.field_key];
                 return (
-                  <View key={d.id} style={[styles.docRow, !!errors.docs && docRequired(d) && !file && { borderColor: colors.error }]} testID={`reg-doc-${d.field_key}`}>
+                  <View key={d.field_key} style={[styles.docRow, !!required[d.field_key] && !file && { borderColor: colors.error }]} testID={`reg-doc-${d.field_key}`}>
                     <View style={[styles.docIcon, !!file && { backgroundColor: colors.forestSoft }]}>
                       <Ionicons name={file ? "document-text" : "document-text-outline"} size={20} color={file ? colors.brandPrimary : colors.muted} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={s.name}>{d.name}</Text>
                       <Text style={s.meta} numberOfLines={1}>{file?.name ?? "JPG, PNG or PDF · max 5 MB"}</Text>
-                      <View style={{ marginTop: 6 }}><Badge label={file ? "Uploaded" : docBadge(d)} small /></View>
+                      <View style={{ marginTop: 6 }}><Badge label={file ? "Uploaded" : required[d.field_key] ? "Required" : "Optional"} tone={!file && required[d.field_key] ? "error" : undefined} small /></View>
                     </View>
                     <Pressable onPress={() => pick(d.field_key)} style={({ pressed }) => [styles.uploadBtn, pressed && { opacity: 0.8 }]} testID={`reg-doc-upload-${d.field_key}`}>
                       <Ionicons name={file ? "refresh-outline" : "cloud-upload-outline"} size={14} color={colors.brandPrimary} />

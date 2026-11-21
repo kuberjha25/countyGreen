@@ -1,18 +1,17 @@
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { lookupPincode } from "@/src/api";
 import { partnerTypeName } from "@/src/brand";
-import { StateCityFields, useMatchState } from "@/src/components/location";
 import { Button, Field, Header, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
 import { useAppDispatch, useAppSelector } from "@/src/store";
 import { updateDraft } from "@/src/store/authSlice";
 import { spacing } from "@/src/theme";
 
-// Screen 5 · Partner registration · Step 2 (business / social / address — fields depend on the partner type).
+// Screen 5 · Partner registration · Step 2 (business details for CP, social links for Influencer).
+// Broker / Freelancer skip this step (see hasDetailsStep).
 export default function ProfileAddon() {
   const s = useScreenStyles();
   const insets = useSafeAreaInsets();
@@ -26,28 +25,15 @@ export default function ProfileAddon() {
     instagram_link: draft.instagram_link ?? "",
     youtube_link: draft.youtube_link ?? "",
     facebook_link: draft.facebook_link ?? "",
-    address: draft.address ?? "",
-    pincode: draft.pincode ?? "",
-    city: draft.city ?? "",
-    state: draft.state ?? "",
   });
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const matchState = useMatchState();
-
-  const onPincode = async (v: string) => {
-    const pin = v.replace(/\D/g, "").slice(0, 6);
-    set("pincode")(pin);
-    const r = await lookupPincode(pin);
-    if (r) setF((x) => ({ ...x, city: r.city, state: matchState(r.state) }));
-  };
 
   const submit = () => {
     const e: Record<string, string> = {};
     if (isCp && !f.company_name.trim()) e.company = "Company / firm name is required";
     const url = /^https?:\/\/\S+$/i;
     if (isInfluencer) for (const k of ["instagram_link", "youtube_link", "facebook_link"] as const) if (f[k] && !url.test(f[k].trim())) e[k] = "Enter the full link, starting with https://";
-    if (f.pincode && !/^\d{6}$/.test(f.pincode)) e.pincode = "PIN code must be 6 digits";
     setErrors(e);
     if (Object.keys(e).length) return;
     dispatch(
@@ -56,10 +42,6 @@ export default function ProfileAddon() {
         instagram_link: isInfluencer ? f.instagram_link.trim() : "",
         youtube_link: isInfluencer ? f.youtube_link.trim() : "",
         facebook_link: isInfluencer ? f.facebook_link.trim() : "",
-        address: f.address.trim(),
-        pincode: f.pincode,
-        city: f.city.trim(),
-        state: f.state,
       }),
     );
     router.push("/(auth)/profile-social");
@@ -87,12 +69,6 @@ export default function ProfileAddon() {
             <Field label="Facebook" placeholder="https://facebook.com/…" value={f.facebook_link} onChangeText={set("facebook_link")} autoCapitalize="none" icon="logo-facebook" error={errors.facebook_link} testID="facebook-input" />
           </>
         ) : null}
-
-        <SectionLabel>Address</SectionLabel>
-        <Field label="Address" placeholder="Street / Locality" value={f.address} onChangeText={set("address")} icon="location-outline" testID="address-input" />
-        <Field label="PIN code" placeholder="160001" value={f.pincode} onChangeText={onPincode} keyboardType="number-pad" maxLength={6} error={errors.pincode} testID="pincode-input" />
-        <StateCityFields state={f.state} city={f.city} onChange={(v) => setF((x) => ({ ...x, ...v }))} testIDPrefix="profile" />
-        <Text style={s.caption}>City and state fill in automatically from the PIN code.</Text>
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>
         <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: insets.bottom + 16 }}>

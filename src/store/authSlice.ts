@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 
 import { ApiError, getToken, request, setToken } from "@/src/api";
 import { getPushRegistration } from "@/src/push";
+import { ApiFailure, toApiFailure } from "@/src/registration";
 import type { Envelope, ProfileStats, User } from "@/src/types";
 
 type Profile = { user: User; stats: ProfileStats | null };
@@ -69,7 +70,9 @@ export const updateProfile = createAsyncThunk("auth/updateProfile", async (body:
 });
 
 // POST /api/registrations — JSON for broker / influencer / freelancer, multipart for channel partners (documents).
-export const selfRegister = createAsyncThunk("auth/selfRegister", async (input: FormData | Record<string, string>) => {
+// Rejects with an ApiFailure (message + Laravel field errors) so callers can read which documents the API wants.
+export const selfRegister = createAsyncThunk<{ token: string | null; profile: Profile | null; message: string }, FormData | Record<string, string>, { rejectValue: ApiFailure }>("auth/selfRegister", async (input, { rejectWithValue }) => {
+  try {
   const push = await pushFields();
   let payload = input;
   if (input instanceof FormData) Object.entries(push).forEach(([k, v]) => input.append(k, v));
@@ -87,6 +90,9 @@ export const selfRegister = createAsyncThunk("auth/selfRegister", async (input: 
     }
   }
   return { token: r.token ?? null, profile, message: r.message || "Registration submitted and pending approval." };
+  } catch (e) {
+    return rejectWithValue(toApiFailure(e));
+  }
 });
 
 export const logout = createAsyncThunk("auth/logout", async () => {

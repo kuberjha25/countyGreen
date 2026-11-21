@@ -173,7 +173,6 @@ export default function LeadDetail() {
                 <SectionLabel style={{ marginTop: spacing.xl }}>Manage Lead</SectionLabel>
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
                   <Button label="Update status" icon="flag-outline" variant="secondary" small onPress={() => { setNewStatus(""); setStatusRemarks(""); setSheetErr(undefined); setStatusOpen(true); }} style={{ flexGrow: 1 }} testID="lead-status-button" />
-                  <Button label="Edit details" icon="create-outline" variant="secondary" small onPress={() => router.push(`/leads/${id}/edit`)} style={{ flexGrow: 1 }} testID="lead-edit-button" />
                   <Button label="Reassign" icon="swap-horizontal-outline" variant="secondary" small onPress={() => toast.show(COMING_SOON, "info")} style={{ flexGrow: 1 }} testID="lead-reassign-button" />
                   <Button label="Delete" icon="trash-outline" variant="danger" small onPress={() => toast.show(COMING_SOON, "info")} style={{ flexGrow: 1 }} testID="lead-delete-button" />
                 </View>

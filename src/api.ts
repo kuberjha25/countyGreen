@@ -141,15 +141,19 @@ export async function request<T = any>(path: string, { method = "GET", query, bo
 export const errorMessage = (e: unknown) =>
   typeof e === "string" ? e : e && typeof (e as { message?: unknown }).message === "string" && (e as { message: string }).message ? (e as { message: string }).message : "Something went wrong";
 
-// India Post PIN code lookup (public, third party) → city / state.
-export async function lookupPincode(pin: string): Promise<{ city: string; state: string } | null> {
+// India Post PIN lookup → the PIN's place (`districts` = every district / region its post offices
+// are filed under), `{ found: false }` for an unknown PIN, or null when the service can't be reached.
+export type PincodePlace = { found: true; city: string; state: string; districts: string[] } | { found: false };
+export async function lookupPincode(pin: string): Promise<PincodePlace | null> {
   if (!/^\d{6}$/.test(pin)) return null;
   try {
     const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
     const json = await res.json();
     const entry = Array.isArray(json) ? json[0] : json;
-    const po = entry?.Status === "Success" ? entry.PostOffice?.[0] : null;
-    return po ? { city: po.District, state: po.State } : null;
+    const offices: { District?: string; Region?: string; State?: string }[] = entry?.Status === "Success" ? entry.PostOffice ?? [] : [];
+    if (!offices.length) return { found: false };
+    const districts = [...new Set(offices.flatMap((o) => [o.District, o.Region]).filter((v): v is string => !!v))];
+    return { found: true, city: offices[0].District ?? "", state: offices[0].State ?? "", districts };
   } catch {
     return null;
   }

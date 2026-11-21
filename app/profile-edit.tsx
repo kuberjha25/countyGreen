@@ -4,9 +4,9 @@ import { Text, View } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { errorMessage, lookupPincode } from "@/src/api";
+import { errorMessage } from "@/src/api";
 import { useAuth } from "@/src/auth";
-import { StateCityFields, useMatchState } from "@/src/components/location";
+import { PinCodeField, StateCityFields, usePincodeCheck } from "@/src/components/location";
 import { Button, Field, Header, ScreenTitle, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { updateProfile } from "@/src/store/authSlice";
 import { useRun } from "@/src/store/useRun";
@@ -25,19 +25,14 @@ export default function ProfileEdit() {
   const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [run, saving] = useRun();
-  const matchState = useMatchState();
-
-  const onPincode = async (v: string) => {
-    const pin = v.replace(/\D/g, "").slice(0, 6);
-    set("pincode")(pin);
-    const r = await lookupPincode(pin);
-    if (r) setF((x) => ({ ...x, city: r.city, state: matchState(r.state) }));
-  };
+  // PIN checked against India Post and the chosen state / city; fills them in while both are empty.
+  const pinCheck = usePincodeCheck(f.pincode, f.state, f.city, (v) => setF((x) => (x.state || x.city ? x : { ...x, ...v })));
 
   const save = async () => {
     const e: Record<string, string> = {};
     if (!f.first_name.trim()) e.first = "First name is required";
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email)) e.email = "Enter a valid email";
+    if (pinCheck.error) return toast.show(pinCheck.error, "error");
     setErrors(e);
     if (Object.keys(e).length) return;
     try {
@@ -62,8 +57,8 @@ export default function ProfileEdit() {
         <Field label="Mobile number" value={user?.mobile ?? ""} editable={false} rightIcon="lock-closed-outline" testID="edit-mobile" />
         <SectionLabel>Address</SectionLabel>
         <Field label="Address" value={f.address} onChangeText={set("address")} icon="location-outline" testID="edit-address" />
-        <Field label="PIN code" value={f.pincode} onChangeText={onPincode} keyboardType="number-pad" maxLength={6} testID="edit-pincode" />
         <StateCityFields state={f.state} city={f.city} onChange={(v) => setF((x) => ({ ...x, ...v }))} testIDPrefix="edit" />
+        <PinCodeField value={f.pincode} onChange={set("pincode")} check={pinCheck} onUseSuggestion={(v) => setF((x) => ({ ...x, ...v }))} testID="edit-pincode" />
         <Text style={s.caption}>Partner type and company details are updated by the County Green partner desk.</Text>
       </KeyboardAwareScrollView>
       <KeyboardStickyView offset={{ closed: 0, opened: insets.bottom }}>

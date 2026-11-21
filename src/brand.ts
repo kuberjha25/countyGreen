@@ -30,6 +30,9 @@ export const PARTNER_TYPES: { key: PartnerType; short: string; icon: string; api
 // API value (channel_partner) ↔ display name (Channel Partner).
 export const partnerTypeName = (api?: string | null) => PARTNER_TYPES.find((p) => p.api === api || p.key === api)?.key ?? api ?? "—";
 
+// Registration step 2 (business details / social links) only applies to these types; others skip it.
+export const hasDetailsStep = (api?: string | null) => api === "channel_partner" || api === "influencer";
+
 // Indian states & union territories (address forms).
 export const STATES = [
   "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu",

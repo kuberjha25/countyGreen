@@ -79,7 +79,6 @@ export default function VisitDetail() {
               <InfoRow icon="home-outline" label="Project" value={v.project_name ?? undefined} />
               <InfoRow icon="person-outline" label="Booked by" value={v.booked_by ?? undefined} />
               <InfoRow icon="person-circle-outline" label="Assigned County Green staff" value={v.assigned_to ?? undefined} testID="visit-assigned-staff" />
-              {v.visit_type && v.visit_type !== "-" ? <InfoRow icon="pricetag-outline" label="Visitor type" value={label({}, v.visit_type)} /> : null}
             </Card>
 
             <SectionLabel style={{ marginTop: spacing.lg }}>Customer Information</SectionLabel>

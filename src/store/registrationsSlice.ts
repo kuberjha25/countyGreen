@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 
 import { request } from "@/src/api";
+import { ApiFailure, toApiFailure } from "@/src/registration";
 import { addListCases, emptyList, Entry, ListArgs, ListState, cleanParams } from "@/src/store/list";
 import type { Envelope, Paginated, RegistrationDetail, RegistrationRow } from "@/src/types";
 
@@ -14,8 +15,16 @@ export const fetchRegistrations = createAsyncThunk("registrations/list", async (
 export const fetchRegistration = createAsyncThunk("registrations/detail", async (id: number) => (await request<Envelope<RegistrationDetail>>(`/registrations/${id}`)).data);
 
 // Backoffice registers a partner; the partner's mobile is then verified by OTP.
-export const adminRegister = createAsyncThunk("registrations/adminCreate", async (payload: FormData | Record<string, string>) =>
-  request<{ message: string; requires_otp?: boolean; mobile?: string }>("/admin/registrations", payload instanceof FormData ? { method: "POST", form: payload } : { method: "POST", body: payload }),
+// Rejects with an ApiFailure (message + Laravel field errors) so the form can mark the documents the API wants.
+export const adminRegister = createAsyncThunk<{ message: string; requires_otp?: boolean; mobile?: string }, FormData | Record<string, string>, { rejectValue: ApiFailure }>(
+  "registrations/adminCreate",
+  async (payload, { rejectWithValue }) => {
+    try {
+      return await request<{ message: string; requires_otp?: boolean; mobile?: string }>("/admin/registrations", payload instanceof FormData ? { method: "POST", form: payload } : { method: "POST", body: payload });
+    } catch (e) {
+      return rejectWithValue(toApiFailure(e));
+    }
+  },
 );
 export const verifyRegistrantOtp = createAsyncThunk("registrations/verifyOtp", async (body: { mobile: string; otp: string }) => request<{ message: string }>("/admin/registrations/verify-otp", { method: "POST", body }));
 export const resendRegistrantOtp = createAsyncThunk("registrations/resendOtp", async (mobile: string) => request<{ message: string }>("/admin/registrations/resend-otp", { method: "POST", body: { mobile } }));

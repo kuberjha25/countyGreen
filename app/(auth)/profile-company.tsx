@@ -1,15 +1,16 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import * as DocumentPicker from "expo-document-picker";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { appendFile, errorMessage, mimeOf, PickedFile } from "@/src/api";
-import { partnerTypeName } from "@/src/brand";
+import { hasDetailsStep, partnerTypeName } from "@/src/brand";
 import { Badge, Button, ErrorState, Header, Loading, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
 import { useCpDocuments } from "@/src/lookups";
+import { knownDocsFrom, readRegistrationErrors, registrationValues, RequiredDocs } from "@/src/registration";
 import { useAppDispatch, useAppSelector } from "@/src/store";
 import { selfRegister } from "@/src/store/authSlice";
 import { fetchCpDocuments } from "@/src/store/lookupsSlice";
@@ -18,11 +19,19 @@ import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
 
 const MAX_BYTES = 5 * 1024 * 1024;
-// Draft keys sent to POST /api/registrations (employee_name is only for display).
-const FIELDS = ["partner_type", "first_name", "last_name", "mobile", "email", "address", "city", "state", "pincode", "knows_employee", "employee_id", "company_name", "business_type", "facebook_link", "instagram_link", "youtube_link"];
+
+const parseRequired = (raw?: string): RequiredDocs => {
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
 
 // Screen 7 · Partner registration · Step 4 (documents + submit).
-// Channel partners upload the documents Admin configured (GET /api/cp-documents);
+// Channel partners see every document set up for their business type (GET /api/cp-documents),
+// all Optional — except those the registration API asked for (step 3's submit passes them in
+// the `required` param, a later submit can add more), which are Required.
 // RERA is collected only as an uploaded certificate, never as a typed number.
 export default function ProfileCompany() {
   const s = useScreenStyles();
@@ -37,6 +46,12 @@ export default function ProfileCompany() {
   const docs = useCpDocuments(isCp ? draft.business_type : undefined);
   const [files, setFiles] = useState<Record<string, PickedFile>>({});
   const [run, submitting] = useRun();
+  const params = useLocalSearchParams<{ required?: string }>();
+  const [required, setRequired] = useState<RequiredDocs>(() => parseRequired(params.required));
+  const cpDocuments = useAppSelector((st) => st.lookups.cpDocuments);
+  // The type's documents, plus any the API asked for that aren't in that list.
+  const listed = isCp ? docs.data ?? [] : [];
+  const list = [...listed, ...Object.entries(required).filter(([k]) => !listed.some((d) => d.field_key === k)).map(([k, r]) => ({ id: -1, field_key: k, name: r.name, is_mandatory: true }))];
 
   const pick = async (key: string) => {
     const r = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "image/jpeg", "image/png"], copyToCacheDirectory: true });
@@ -49,11 +64,10 @@ export default function ProfileCompany() {
   };
 
   const submit = async () => {
-    if (isCp && docs.status !== "succeeded") return toast.show(docs.status === "failed" ? "Could not load the document list — tap Retry" : "Loading the document list…", "error");
-    const list = isCp ? docs.data ?? [] : [];
-    const missing = list.filter((d) => d.is_mandatory && !files[d.field_key]);
+    if (isCp && docs.status === "loading") return toast.show("Loading the document list…", "error");
+    const missing = list.filter((d) => required[d.field_key] && !files[d.field_key]);
     if (missing.length) return toast.show(`Please upload: ${missing.map((m) => m.name).join(", ")}`, "error");
-    const values = Object.fromEntries(FIELDS.map((k) => [k, draft[k] ?? ""]).filter(([k, v]) => v !== "" && !(k === "employee_id" && draft.knows_employee !== "yes")));
+    const values = registrationValues(draft);
     let payload: FormData | Record<string, string> = values;
     if (isCp) {
       const form = new FormData();
@@ -65,6 +79,11 @@ export default function ProfileCompany() {
       await run(selfRegister(payload));
       router.replace("/(auth)/welcome");
     } catch (e) {
+      const { docs: asked, others } = readRegistrationErrors(e, [...list, ...knownDocsFrom(cpDocuments)]);
+      if (Object.keys(asked).length) {
+        setRequired((r) => ({ ...r, ...asked }));
+        return toast.show(others[0]?.message ?? `Please upload: ${Object.values(asked).map((d) => d.name).join(", ")}`, "error");
+      }
       toast.show(errorMessage(e), "error");
     }
   };
@@ -73,26 +92,27 @@ export default function ProfileCompany() {
     <View style={s.screen} testID="profile-company-screen">
       <Header showBell={false} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled">
-        <StepIndicator step={4} total={4} />
+        <StepIndicator step={hasDetailsStep(draft.partner_type) ? 4 : 3} total={hasDetailsStep(draft.partner_type) ? 4 : 3} />
         <ScreenTitle eyebrow={partnerTypeName(draft.partner_type).toUpperCase()} title="Complete Profile" subtitle={isCp ? "Please upload the documents required for your registration." : "Review and submit your registration."} />
 
         {isCp ? (
           <>
             <SectionLabel>Upload Documents</SectionLabel>
             {docs.status === "loading" ? <Loading /> : docs.status === "failed" ? <ErrorState message={docs.error ?? "Could not load the document list"} onRetry={() => dispatch(fetchCpDocuments(draft.business_type))} /> : null}
-            {docs.status === "succeeded" && !(docs.data ?? []).length ? <Text style={s.bodyMuted}>No documents are required right now.</Text> : null}
+            {docs.status === "succeeded" && !list.length ? <Text style={s.bodyMuted}>No documents are needed for this business type.</Text> : null}
             <View style={{ gap: 10 }}>
-              {(docs.data ?? []).map((d) => {
+              {list.map((d) => {
                 const f = files[d.field_key];
+                const req = !!required[d.field_key];
                 return (
-                  <View key={d.id} style={styles.docRow} testID={`doc-row-${d.field_key}`}>
+                  <View key={d.field_key} style={[styles.docRow, req && !f && { borderColor: colors.error }]} testID={`doc-row-${d.field_key}`}>
                     <View style={[styles.docIcon, !!f && { backgroundColor: colors.forestSoft }]}>
                       <Ionicons name={f ? "document-text" : "document-text-outline"} size={20} color={f ? colors.brandPrimary : colors.muted} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.docTitle}>{d.name}</Text>
                       <Text style={styles.docHint} numberOfLines={1}>{f?.name ?? "JPG, PNG or PDF · max 5 MB"}</Text>
-                      <View style={{ marginTop: 6 }}><Badge label={f ? "Uploaded" : d.is_mandatory ? "Required" : "Optional"} small /></View>
+                      <View style={{ marginTop: 6 }}><Badge label={f ? "Uploaded" : req ? "Required" : "Optional"} tone={!f && req ? "error" : undefined} small /></View>
                     </View>
                     <Pressable testID={`doc-upload-${d.field_key}`} onPress={() => pick(d.field_key)} style={({ pressed }) => [styles.uploadBtn, !!f && styles.uploadBtnDone, pressed && { opacity: 0.8 }]}>
                       <Ionicons name={f ? "refresh-outline" : "cloud-upload-outline"} size={14} color={colors.brandPrimary} />

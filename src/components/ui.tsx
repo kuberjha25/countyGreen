@@ -1,16 +1,21 @@
 import Ionicons from "@react-native-vector-icons/ionicons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Keyboard,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   TextInputProps,
   TextStyle,
+  useWindowDimensions,
   View,
   ViewStyle,
 } from "react-native";
@@ -209,6 +214,28 @@ export function Field({
   );
 }
 
+/** Keyboard height while `active` — a sheet pinned to the bottom of a modal isn't resized for it. */
+function useKeyboardHeight(active: boolean) {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    // Android: lift by how far the keyboard's top edge sits from the screen bottom (Samsung's
+    // reported height leaves out its toolbar).
+    const show = Keyboard.addListener(showEvent, (e) =>
+      setHeight(Platform.OS === "android" && e.endCoordinates.screenY > 0 ? Math.max(e.endCoordinates.height, Dimensions.get("screen").height - e.endCoordinates.screenY) : e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(hideEvent, () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return active ? height : 0;
+}
+
+// Dropdown. Long lists (more than 8 options, e.g. states / cities) get a search box; the sheet is
+// laid out like Meraqui's SearchableSelect: title + close, full-width search, then the options.
 export function Select({
   label,
   value,
@@ -218,6 +245,7 @@ export function Select({
   icon,
   error,
   testID,
+  searchable = options.length > 8,
 }: {
   label?: string;
   value?: string;
@@ -227,48 +255,104 @@ export function Select({
   icon?: IconName;
   error?: string;
   testID?: string;
+  searchable?: boolean;
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const { height: appHeight } = useWindowDimensions();
+  // Android modals are edge-to-edge, so size against the full screen there.
+  const windowHeight = Platform.OS === "android" ? Dimensions.get("screen").height : appHeight;
+  const keyboardHeight = useKeyboardHeight(open);
+  const sheetMaxHeight = keyboardHeight > 0 ? windowHeight - keyboardHeight - 60 : windowHeight * 0.75;
+  // A definite maxHeight: some Android builds collapse a FlatList sized only by an auto-height parent.
+  const listMaxHeight = Math.max(120, Math.min(windowHeight * 0.55, sheetMaxHeight - (searchable ? 170 : 110)));
+  const list = q.trim() ? options.filter((o) => o.toLowerCase().includes(q.trim().toLowerCase())) : options;
+  const close = () => {
+    Keyboard.dismiss();
+    setOpen(false);
+    setQ("");
+  };
+  const title = label || placeholder;
+
   return (
     <View style={{ marginBottom: spacing.lg }}>
       {label ? <Text style={styles.fieldLabel}>{label.toUpperCase()}</Text> : null}
-      <Pressable testID={testID} onPress={() => setOpen(true)} style={({ pressed }) => [styles.inputWrap, !!error && styles.inputError, pressed && styles.pressed]}>
+      <Pressable
+        testID={testID}
+        onPress={() => {
+          Keyboard.dismiss();
+          setOpen(true);
+        }}
+        style={({ pressed }) => [styles.inputWrap, !!error && styles.inputError, pressed && styles.pressed]}
+      >
         {icon ? <Ionicons name={icon} size={18} color={colors.muted} /> : null}
         <Text style={[styles.input, { paddingVertical: 0 }, !value && { color: colors.muted }]} numberOfLines={1}>
           {value || placeholder}
         </Text>
-        <Ionicons name="chevron-down" size={18} color={colors.muted} />
+        <Ionicons name="chevron-down" size={18} color={colors.brandPrimary} />
       </Pressable>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)} testID="select-backdrop">
-          <Pressable style={[styles.sheet, { paddingBottom: insets.bottom + 12 }]} onPress={() => {}}>
+      <Modal visible={open} transparent statusBarTranslucent animationType="slide" onRequestClose={close}>
+        <View style={[styles.backdrop, { paddingBottom: keyboardHeight }]}>
+          <Pressable style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} onPress={close} testID="select-backdrop" />
+          <View style={[styles.sheet, { maxHeight: sheetMaxHeight, paddingBottom: keyboardHeight > 0 ? 12 : insets.bottom + 12 }]}>
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>{label || placeholder}</Text>
-            <ScrollView style={{ maxHeight: 380 }}>
-              {options.map((o) => {
+            <View style={styles.selectHeader}>
+              <Text style={[styles.sheetTitle, { flex: 1, marginBottom: 0 }]} numberOfLines={1}>
+                {searchable ? `Select ${title}` : title}
+              </Text>
+              <Pressable onPress={close} hitSlop={10} testID={testID ? `${testID}-close` : undefined}>
+                <Ionicons name="close" size={24} color={colors.onSurface} />
+              </Pressable>
+            </View>
+            {searchable ? (
+              <View style={styles.selectSearch}>
+                <Ionicons name="search" size={18} color={colors.brandPrimary} />
+                <TextInput
+                  value={q}
+                  onChangeText={setQ}
+                  placeholder={`Search ${title.toLowerCase()}`}
+                  placeholderTextColor={colors.muted}
+                  autoCorrect={false}
+                  style={styles.selectSearchInput}
+                  testID={testID ? `${testID}-search` : undefined}
+                />
+                {q ? (
+                  <Pressable onPress={() => setQ("")} hitSlop={8}>
+                    <Ionicons name="close-circle" size={18} color={colors.muted} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : null}
+            <FlatList
+              style={{ flexGrow: 0, maxHeight: listMaxHeight }}
+              data={list}
+              keyExtractor={(o) => o}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={<Text style={[styles.hintText, { paddingVertical: 18, textAlign: "center" }]}>{q.trim() ? "No matches found" : "Nothing to choose from yet"}</Text>}
+              renderItem={({ item: o }) => {
                 const selected = o === value;
                 return (
                   <Pressable
-                    key={o}
                     testID={`select-option-${o.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
                     onPress={() => {
                       onChange(o);
-                      setOpen(false);
+                      close();
                     }}
-                    style={({ pressed }) => [styles.option, selected && styles.optionSelected, pressed && styles.pressed]}
+                    style={({ pressed }) => [styles.selectRow, pressed && styles.pressed]}
                   >
-                    <Text style={[styles.optionText, selected && { color: colors.brandPrimary, fontFamily: fonts.semibold }]}>{o}</Text>
-                    {selected ? <Ionicons name="checkmark" size={18} color={colors.brandPrimary} /> : null}
+                    <Text style={[styles.optionText, { flex: 1 }, selected && { color: colors.brandPrimary, fontFamily: fonts.semibold }]}>{o}</Text>
+                    {selected ? <Ionicons name="checkmark-circle" size={20} color={colors.brandPrimary} /> : null}
                   </Pressable>
                 );
-              })}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
+              }}
+            />
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -830,6 +914,10 @@ const useStyles = makeStyles((colors) => ({
   option: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, paddingHorizontal: 14, borderRadius: radius.md },
   optionSelected: { backgroundColor: colors.forestSoft },
   optionText: { fontFamily: fonts.body, fontSize: 15, color: colors.onSurface },
+  selectHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
+  selectSearch: { height: 50, flexDirection: "row", alignItems: "center", gap: 10, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surfaceSecondary, paddingHorizontal: 14, marginBottom: 12 },
+  selectSearchInput: { flex: 1, alignSelf: "stretch", paddingVertical: 0, textAlignVertical: "center", includeFontPadding: false, fontFamily: fonts.body, fontSize: 14, color: colors.onSurface },
+  selectRow: { minHeight: 50, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
 
   segment: { flexDirection: "row", backgroundColor: colors.surfaceTertiary, borderRadius: radius.pill, padding: 3 },
   segBtn: { flex: 1, height: 34, paddingHorizontal: 10, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
