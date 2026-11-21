@@ -7,7 +7,7 @@ import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboa
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { appendFile, errorMessage, mimeOf, PickedFile } from "@/src/api";
-import { hasDetailsStep, partnerTypeName } from "@/src/brand";
+import { partnerTypeName } from "@/src/brand";
 import { Badge, Button, ErrorState, Header, Loading, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
 import { useCpDocuments } from "@/src/lookups";
 import { knownDocsFrom, readRegistrationErrors, registrationValues, RequiredDocs } from "@/src/registration";
@@ -28,9 +28,9 @@ const parseRequired = (raw?: string): RequiredDocs => {
   }
 };
 
-// Screen 7 · Partner registration · Step 4 (documents + submit).
+// Screen 7 · Partner registration · Step 3 (documents + submit).
 // Channel partners see every document set up for their business type (GET /api/cp-documents),
-// all Optional — except those the registration API asked for (step 3's submit passes them in
+// all Optional — except those the registration API asked for (step 2's submit passes them in
 // the `required` param, a later submit can add more), which are Required.
 // RERA is collected only as an uploaded certificate, never as a typed number.
 export default function ProfileCompany() {
@@ -92,7 +92,7 @@ export default function ProfileCompany() {
     <View style={s.screen} testID="profile-company-screen">
       <Header showBell={false} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled">
-        <StepIndicator step={hasDetailsStep(draft.partner_type) ? 4 : 3} total={hasDetailsStep(draft.partner_type) ? 4 : 3} />
+        <StepIndicator step={3} total={3} />
         <ScreenTitle eyebrow={partnerTypeName(draft.partner_type).toUpperCase()} title="Complete Profile" subtitle={isCp ? "Please upload the documents required for your registration." : "Review and submit your registration."} />
 
         {isCp ? (

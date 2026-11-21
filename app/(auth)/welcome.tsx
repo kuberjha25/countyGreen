@@ -13,7 +13,7 @@ import { BRAND, IMAGES, LEAF } from "@/src/brand";
 import { Button } from "@/src/components/ui";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 
-// Screen 5 · Registration Success (after profile Step 4)
+// Screen 5 · Registration Success (after the last profile step)
 export default function Welcome() {
   const styles = useStyles();
   const { colors } = useTheme();

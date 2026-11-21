@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { hasDetailsStep, PARTNER_TYPES, PartnerType } from "@/src/brand";
+import { PARTNER_TYPES, PartnerType } from "@/src/brand";
 import { PinCodeField, StateCityFields, usePincodeCheck } from "@/src/components/location";
 import { BusinessTypePicker } from "@/src/components/partners";
 import { Button, Field, Header, OptionTile, ScreenTitle, SectionLabel, StepIndicator, useScreenStyles } from "@/src/components/ui";
@@ -13,7 +13,7 @@ import { updateDraft } from "@/src/store/authSlice";
 import { spacing } from "@/src/theme";
 
 // Screen 4 · Partner registration · Step 1 (partner type & basic information).
-// Answers are kept in the Redux draft and submitted together at step 4.
+// Answers are kept in the Redux draft and submitted together at step 2 (CP) or step 3.
 export default function ProfileType() {
   const s = useScreenStyles();
   const insets = useSafeAreaInsets();
@@ -40,19 +40,15 @@ export default function ProfileType() {
     if (pinCheck.error) e.pincode = pinCheck.error;
     setErrors(e);
     if (Object.keys(e).length) return;
-    const partner_type = PARTNER_TYPES.find((p) => p.key === type)!.api;
-    dispatch(updateDraft({ partner_type, business_type: isCp ? business : "", first_name: first.trim(), last_name: last.trim(), email: email.trim(), address: addr.address.trim(), pincode: addr.pincode, city: addr.city.trim(), state: addr.state }));
-    if (hasDetailsStep(partner_type)) return router.push("/(auth)/profile-addon");
-    // Broker / Freelancer have no step-2 fields — clear any left over from another type and skip it.
-    dispatch(updateDraft({ company_name: "", instagram_link: "", youtube_link: "", facebook_link: "" }));
-    router.push("/(auth)/profile-social");
+    dispatch(updateDraft({ partner_type: PARTNER_TYPES.find((p) => p.key === type)!.api, business_type: isCp ? business : "", first_name: first.trim(), last_name: last.trim(), email: email.trim(), address: addr.address.trim(), pincode: addr.pincode, city: addr.city.trim(), state: addr.state }));
+    router.push("/(auth)/profile-addon");
   };
 
   return (
     <View style={s.screen} testID="profile-type-screen">
       <Header showBell={false} onBack={() => router.replace("/(auth)/login")} />
       <KeyboardAwareScrollView bottomOffset={110} contentContainerStyle={[s.content, { paddingBottom: 120, paddingTop: 8 }]} keyboardShouldPersistTaps="handled">
-        <StepIndicator step={1} total={hasDetailsStep(PARTNER_TYPES.find((p) => p.key === type)!.api) ? 4 : 3} />
+        <StepIndicator step={1} total={3} />
         <ScreenTitle title="Complete Profile" subtitle="Please fill in your details to get started" />
 
         <SectionLabel>I am a</SectionLabel>
