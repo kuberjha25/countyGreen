@@ -12,12 +12,12 @@ import { StateCityFields, useMatchState } from "@/src/components/location";
 import { BusinessTypePicker, ReferenceChooser } from "@/src/components/partners";
 import { Badge, Button, ChoiceChips, Field, Header, OptionTile, ScreenTitle, SectionLabel, useScreenStyles } from "@/src/components/ui";
 import { digits } from "@/src/format";
-import { useCpDocuments } from "@/src/lookups";
+import { useAllCpDocuments, useCpDocuments } from "@/src/lookups";
 import { adminRegister } from "@/src/store/registrationsSlice";
 import { useRun } from "@/src/store/useRun";
 import { fonts, makeStyles, radius, spacing, useTheme } from "@/src/theme";
 import { useToast } from "@/src/toast";
-import { ApiPartnerType, Reference } from "@/src/types";
+import { ApiPartnerType, CpDocument, Reference } from "@/src/types";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const EMPTY = { first_name: "", last_name: "", mobile: "", email: "", address: "", pincode: "", city: "", state: "", company_name: "", business_type: "", facebook_link: "", instagram_link: "", youtube_link: "" };
@@ -42,6 +42,13 @@ export default function NewRegistration() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [run, saving] = useRun();
   const isCp = type === "channel_partner";
+  // Every type's documents are fetched up front so the upload list (optional ones too) shows as
+  // soon as Channel Partner is picked; once a business type is chosen, only that type's list.
+  const allDocs = useAllCpDocuments(isCp);
+  const docList: (CpDocument & { requiredFor?: string[] })[] = f.business_type ? docs.data ?? [] : allDocs.data;
+  const docRequired = (d: CpDocument & { requiredFor?: string[] }) => (f.business_type ? d.is_mandatory : !!d.requiredFor?.length);
+  const docBadge = (d: CpDocument & { requiredFor?: string[] }) =>
+    f.business_type ? (d.is_mandatory ? "Required" : "Optional") : d.requiredFor?.length ? `Required for ${d.requiredFor.join(", ")}` : "Optional";
   const isInfluencer = type === "influencer";
 
   const onPincode = async (v: string) => {
@@ -145,21 +152,23 @@ export default function NewRegistration() {
         <ChoiceChips label="Does the partner know a County Green employee?" value={knows ? "Yes" : "No"} options={["Yes", "No"]} onChange={(v) => setKnows(v === "Yes")} testID="reg-knows-employee" />
         {knows ? <ReferenceChooser value={employee} onChange={setEmployee} userType="backoffice" label="Associated employee" error={errors.employee} testID="reg-employee" /> : null}
 
-        {isCp && (docs.data ?? []).length ? (
+        {isCp && (docList.length || allDocs.loading || (f.business_type && docs.status === "loading")) ? (
           <>
             <SectionLabel>Documents</SectionLabel>
+            {!f.business_type && docList.length ? <Text style={[s.meta, { marginBottom: 10 }]}>Select the type of business to confirm which documents are required.</Text> : null}
+            {!docList.length ? <Text style={[s.meta, { marginBottom: 10 }]}>Loading the document list…</Text> : null}
             <View style={{ gap: 10 }}>
-              {(docs.data ?? []).map((d) => {
+              {docList.map((d) => {
                 const file = files[d.field_key];
                 return (
-                  <View key={d.id} style={[styles.docRow, !!errors.docs && d.is_mandatory && !file && { borderColor: colors.error }]} testID={`reg-doc-${d.field_key}`}>
+                  <View key={d.id} style={[styles.docRow, !!errors.docs && docRequired(d) && !file && { borderColor: colors.error }]} testID={`reg-doc-${d.field_key}`}>
                     <View style={[styles.docIcon, !!file && { backgroundColor: colors.forestSoft }]}>
                       <Ionicons name={file ? "document-text" : "document-text-outline"} size={20} color={file ? colors.brandPrimary : colors.muted} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={s.name}>{d.name}</Text>
                       <Text style={s.meta} numberOfLines={1}>{file?.name ?? "JPG, PNG or PDF · max 5 MB"}</Text>
-                      <View style={{ marginTop: 6 }}><Badge label={file ? "Uploaded" : d.is_mandatory ? "Required" : "Optional"} small /></View>
+                      <View style={{ marginTop: 6 }}><Badge label={file ? "Uploaded" : docBadge(d)} small /></View>
                     </View>
                     <Pressable onPress={() => pick(d.field_key)} style={({ pressed }) => [styles.uploadBtn, pressed && { opacity: 0.8 }]} testID={`reg-doc-upload-${d.field_key}`}>
                       <Ionicons name={file ? "refresh-outline" : "cloud-upload-outline"} size={14} color={colors.brandPrimary} />

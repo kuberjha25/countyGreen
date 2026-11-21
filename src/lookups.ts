@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import { useAppDispatch, useAppSelector } from "@/src/store";
 import { fetchProjects } from "@/src/store/catalogSlice";
@@ -48,6 +48,33 @@ export function useCpDocuments(businessType?: string) {
     if (businessType) dispatch(fetchCpDocuments(businessType));
   }, [dispatch, businessType]);
   return useAppSelector((s) => (businessType ? s.lookups.cpDocuments[businessType] : undefined)) ?? NO_DOCS;
+}
+
+// Documents of every business type, merged (deduped by field_key), for showing the upload
+// list before a type is chosen. `requiredFor` = names of the types that make it mandatory.
+export type MergedCpDocument = CpDocument & { requiredFor: string[] };
+export function useAllCpDocuments(enabled: boolean) {
+  const dispatch = useAppDispatch();
+  const types = useBusinessTypes();
+  const byType = useAppSelector((s) => s.lookups.cpDocuments);
+  const list = useMemo(() => types.data ?? [], [types.data]);
+  const slugs = list.map((t) => t.slug).join(",");
+  useEffect(() => {
+    if (enabled) slugs.split(",").filter(Boolean).forEach((slug) => dispatch(fetchCpDocuments(slug)));
+  }, [dispatch, enabled, slugs]);
+  return useMemo(() => {
+    const merged: MergedCpDocument[] = [];
+    const seen: Record<string, MergedCpDocument> = {};
+    list.forEach((t) =>
+      (byType[t.slug]?.data ?? []).forEach((d) => {
+        if (!seen[d.field_key]) merged.push((seen[d.field_key] = { ...d, requiredFor: [] }));
+        if (d.is_mandatory) seen[d.field_key].requiredFor.push(t.name);
+      })
+    );
+    const loading =
+      !merged.length && (types.status === "loading" || types.status === "idle" || list.some((t) => ["loading", "idle", undefined].includes(byType[t.slug]?.status)));
+    return { data: merged, loading };
+  }, [list, byType, types.status]);
 }
 
 // Statuses staff can set on a lead (PUT /api/leads/{id} status).
